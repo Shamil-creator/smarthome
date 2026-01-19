@@ -1,0 +1,34 @@
+version: '3.8'
+
+# Development docker-compose without bot
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5000"
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=true
+      - SKIP_AUTH_VALIDATION=true
+      # Dummy token for development
+      - BOT_TOKEN=dummy_token_for_dev
+    volumes:
+      - ./backend:/app
+      - backend_data:/app/instance
+      - backend_uploads:/app/uploads
+    command: python app.py
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  backend_data:
+  backend_uploads:

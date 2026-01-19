@@ -1,0 +1,115 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    environment:
+      - VITE_API_URL=http://backend:5000/api
+    depends_on:
+      - backend
+    # Security: resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    # Security: read-only root filesystem where possible
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:5000:5000"  # Only expose to localhost
+    environment:
+      - FLASK_ENV=production
+      - FLASK_DEBUG=false
+      - BOT_TOKEN=${BOT_TOKEN:?BOT_TOKEN environment variable is required}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
+      - SKIP_AUTH_VALIDATION=${SKIP_AUTH_VALIDATION:-false}
+      - RATE_LIMIT_DEFAULT=${RATE_LIMIT_DEFAULT:-60 per minute}
+      - RATE_LIMIT_AUTH=${RATE_LIMIT_AUTH:-10 per minute}
+    volumes:
+      - backend_data:/app/instance  # Persist SQLite database
+      - backend_uploads:/app/uploads  # Persist uploads
+    # Security: resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    # Security: don't allow privilege escalation
+    security_opt:
+      - no-new-privileges:true
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN:?BOT_TOKEN environment variable is required}
+      - WEBAPP_URL=${WEBAPP_URL:?WEBAPP_URL environment variable is required}
+      - API_URL=http://backend:5000/api
+    depends_on:
+      backend:
+        condition: service_healthy
+    # Security: resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    # Security: don't allow privilege escalation
+    security_opt:
+      - no-new-privileges:true
+    # Restart policy
+    restart: unless-stopped
+
+# Named volumes for data persistence
+volumes:
+  backend_data:
+    driver: local
+  backend_uploads:
+    driver: local
+
+# Instructions:
+# 1. Copy env.example to .env and fill in the values
+# 2. For local dev, use ngrok to expose port 8080: `ngrok http 8080`
+# 3. Set WEBAPP_URL to the https address provided by ngrok
+# 4. Run `docker-compose up --build`
+#
+# Local development (without Docker):
+# 1. Start backend: cd backend && pip install -r requirements.txt && python app.py
+# 2. Start frontend: npm run dev
+# 3. Start bot: cd bot && pip install -r requirements.txt && python main.py
+#
+# Security notes:
+# - All services run as non-root users
+# - Resource limits prevent DoS attacks
+# - Backend only exposed to localhost (use reverse proxy for production)
+# - no-new-privileges prevents privilege escalation
