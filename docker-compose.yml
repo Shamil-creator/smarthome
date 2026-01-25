@@ -7,10 +7,11 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8080:80"
-    environment:
-      - VITE_API_URL=http://backend:5000/api
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    networks:
+      - smarthome-network
     # Security: resource limits
     deploy:
       resources:
@@ -26,13 +27,14 @@ services:
       - /tmp
       - /var/cache/nginx
       - /var/run
+    restart: unless-stopped
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "127.0.0.1:5000:5000"  # Only expose to localhost
+      - "5000:5000"
     environment:
       - FLASK_ENV=production
       - FLASK_DEBUG=false
@@ -44,6 +46,8 @@ services:
     volumes:
       - backend_data:/app/instance  # Persist SQLite database
       - backend_uploads:/app/uploads  # Persist uploads
+    networks:
+      - smarthome-network
     # Security: resource limits
     deploy:
       resources:
@@ -63,6 +67,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    restart: unless-stopped
 
   bot:
     build:
@@ -75,6 +80,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    networks:
+      - smarthome-network
     # Security: resource limits
     deploy:
       resources:
@@ -97,19 +104,49 @@ volumes:
   backend_uploads:
     driver: local
 
-# Instructions:
-# 1. Copy env.example to .env and fill in the values
-# 2. For local dev, use ngrok to expose port 8080: `ngrok http 8080`
-# 3. Set WEBAPP_URL to the https address provided by ngrok
-# 4. Run `docker-compose up --build`
+# Network for inter-service communication
+networks:
+  smarthome-network:
+    driver: bridge
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ИНСТРУКЦИИ ПО ЗАПУСКУ
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #
-# Local development (without Docker):
-# 1. Start backend: cd backend && pip install -r requirements.txt && python app.py
-# 2. Start frontend: npm run dev
-# 3. Start bot: cd bot && pip install -r requirements.txt && python main.py
+# 🚀 АВТОМАТИЧЕСКИЙ ЗАПУСК (рекомендуется):
+#    ./start-with-ngrok.sh
 #
-# Security notes:
-# - All services run as non-root users
-# - Resource limits prevent DoS attacks
-# - Backend only exposed to localhost (use reverse proxy for production)
-# - no-new-privileges prevents privilege escalation
+#    Этот скрипт автоматически:
+#    1. Запустит ngrok
+#    2. Получит HTTPS URL
+#    3. Настроит .env файл
+#    4. Запустит все контейнеры
+#
+# 🛠️ РУЧНОЙ ЗАПУСК:
+#    1. Запустите ngrok: ngrok http 8080
+#    2. Скопируйте HTTPS URL
+#    3. Создайте .env: cp env.example .env
+#    4. Заполните BOT_TOKEN и WEBAPP_URL в .env
+#    5. Запустите: docker-compose up --build
+#
+# 🛑 ОСТАНОВКА:
+#    ./stop-with-ngrok.sh
+#    или: docker-compose down
+#
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ТРЕБОВАНИЯ К СЕРВЕРУ
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#
+# Минимальные:
+#   - CPU: 1-2 ядра
+#   - RAM: 1-2 GB
+#   - Диск: 5-10 GB
+#   - ОС: Linux (Ubuntu 20.04+ или Debian 11+)
+#   - Docker & Docker Compose
+#
+# Рекомендуемые:
+#   - CPU: 2-4 ядра
+#   - RAM: 2-4 GB
+#   - Диск: 20 GB SSD
+#
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
