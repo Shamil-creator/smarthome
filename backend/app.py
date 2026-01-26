@@ -48,8 +48,19 @@ CORS(app, resources={r"/api/*": {"origins": cors_origins}})
 Compress(app)  # Enable gzip compression for API responses
 
 # Rate limiting configuration
-RATE_LIMIT_DEFAULT = os.getenv('RATE_LIMIT_DEFAULT', '60 per minute')
-RATE_LIMIT_AUTH = os.getenv('RATE_LIMIT_AUTH', '10 per minute')
+# Normalize rate limit strings to ensure proper format
+def normalize_rate_limit(limit_str):
+    """Normalize rate limit string to ensure proper format"""
+    if not limit_str:
+        return '60 per minute'
+    # If it's just a number, add 'per minute'
+    if limit_str.strip().isdigit():
+        return f"{limit_str.strip()} per minute"
+    # If it already has format, return as is
+    return limit_str.strip()
+
+RATE_LIMIT_DEFAULT = normalize_rate_limit(os.getenv('RATE_LIMIT_DEFAULT', '60 per minute'))
+RATE_LIMIT_AUTH = normalize_rate_limit(os.getenv('RATE_LIMIT_AUTH', '10 per minute'))
 
 def get_rate_limit_key():
     """Get rate limit key - prefer Telegram user ID over IP"""
