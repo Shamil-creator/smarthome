@@ -19,6 +19,9 @@ services:
         reservations:
           cpus: '0.1'
           memory: 64M
+    # Security: don't allow privilege escalation
+    security_opt:
+      - no-new-privileges:true
     # tmpfs для директорий, которые nginx должен создавать
     tmpfs:
       - /tmp
