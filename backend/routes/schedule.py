@@ -66,7 +66,10 @@ def calculate_earnings(work_log):
         return 0
     
     # Fetch all prices in one query
-    prices = {p.id: p.price for p in PriceItem.query.filter(PriceItem.id.in_(item_ids)).all()}
+    prices = {
+        p.id: {'price': p.price, 'coefficient': p.coefficient}
+        for p in PriceItem.query.filter(PriceItem.id.in_(item_ids)).all()
+    }
     
     # Calculate total
     total = 0
@@ -74,14 +77,16 @@ def calculate_earnings(work_log):
         item_id = item.get('itemId')
         if isinstance(item_id, str):
             item_id = int(item_id)
-        price = prices.get(item_id, 0)
+        price_data = prices.get(item_id, {'price': 0, 'coefficient': 1.0})
+        price = price_data['price']
+        coefficient = price_data['coefficient']
         quantity = item.get('quantity', 1)
         # Validate quantity
         if not isinstance(quantity, int) or quantity < 1:
             quantity = 1
-        total += price * quantity
-    
-    return total
+        total += price * coefficient * quantity
+
+    return int(round(total))
 
 
 def update_work_log(scheduled_day, work_log):

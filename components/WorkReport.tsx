@@ -77,10 +77,12 @@ const WorkReport: React.FC<WorkReportProps> = ({
 
   const getQuantity = (id: string) => log.find(item => item.itemId === id)?.quantity || 0;
 
-  const totalEarnings = log.reduce((sum, item) => {
-    const price = priceList.find(p => p.id === item.itemId)?.price || 0;
-    return sum + (price * item.quantity);
-  }, 0);
+  const totalEarnings = Math.round(log.reduce((sum, item) => {
+    const priceItem = priceList.find(p => p.id === item.itemId);
+    const price = priceItem?.price || 0;
+    const coefficient = priceItem?.coefficient ?? 1;
+    return sum + (price * coefficient * item.quantity);
+  }, 0));
 
   const handleAction = async (action: 'save_draft' | 'submit' | 'confirm_payment') => {
     if (log.length === 0 && action !== 'confirm_payment') return;
@@ -216,7 +218,9 @@ const WorkReport: React.FC<WorkReportProps> = ({
                   <div key={item.id} className="p-4 flex items-center justify-between">
                     <div className="flex-1 pr-4">
                       <div className="font-medium text-gray-900">{item.name}</div>
-                      <div className="text-sm text-gray-500">{item.price} ₽</div>
+                      <div className="text-sm text-gray-500">
+                        {item.price} ₽ × {item.coefficient ?? 1}
+                      </div>
                     </div>
                     {isEditable ? (
                       <div className="flex items-center bg-gray-50 rounded-lg p-1">

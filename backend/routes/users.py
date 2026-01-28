@@ -91,7 +91,7 @@ def update_user(user_id):
 @users_bp.route('/users/set-admin', methods=['POST'])
 @optional_auth
 def set_admin():
-    """Set user as admin (only works if no admins exist)"""
+    """Set user as admin"""
     data = request.get_json()
     if not data:
         return jsonify({'error': 'No data provided'}), 400
@@ -108,11 +108,6 @@ def set_admin():
             raise ValueError()
     except (ValueError, TypeError):
         return jsonify({'error': 'Invalid telegramId'}), 400
-    
-    # Check if any admin exists
-    admin_exists = User.query.filter_by(role='admin').first()
-    if admin_exists:
-        return jsonify({'error': 'Admin already exists'}), 403
     
     user = User.query.filter_by(telegram_id=telegram_id).first()
     if not user:

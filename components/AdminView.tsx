@@ -168,13 +168,15 @@ const AdminView: React.FC<AdminViewProps> = ({
     setIsLoading(true);
     
     const finalPrice = editingPrice.price || 0;
+    const finalCoefficient = editingPrice.coefficient ?? 1;
     
     try {
       if (editingPrice.id) {
         const updated = await pricesApi.update(editingPrice.id, {
           name: editingPrice.name,
           category: editingPrice.category,
-          price: finalPrice
+          price: finalPrice,
+          coefficient: finalCoefficient
         });
         if (onUpdatePrice) {
           onUpdatePrice(updated);
@@ -185,7 +187,8 @@ const AdminView: React.FC<AdminViewProps> = ({
         const created = await pricesApi.create({
           name: editingPrice.name,
           category: editingPrice.category,
-          price: finalPrice
+          price: finalPrice,
+          coefficient: finalCoefficient
         });
         if (onAddPrice) {
           onAddPrice(created);
@@ -196,7 +199,7 @@ const AdminView: React.FC<AdminViewProps> = ({
       setEditingPrice(null);
     } catch (err) {
       console.error('Error saving price:', err);
-      alert('Ошибка сохранения');
+      alert((err as any)?.message || 'Ошибка сохранения');
     } finally {
       setIsLoading(false);
     }
@@ -501,9 +504,9 @@ const AdminView: React.FC<AdminViewProps> = ({
                                                                 ) : (
                                                                     <span className="text-gray-400">x{logItem.quantity}</span>
                                                                 )}
-                                                                <span className="font-medium text-gray-900 w-16 text-right">
-                                                                    {service ? (service.price * logItem.quantity) : 0} ₽
-                                                                </span>
+                                                            <span className="font-medium text-gray-900 w-16 text-right">
+                                                                {service ? Math.round(service.price * (service.coefficient ?? 1) * logItem.quantity) : 0} ₽
+                                                            </span>
                                                               </div>
                                                           </div>
                                                       );
@@ -633,7 +636,7 @@ const AdminView: React.FC<AdminViewProps> = ({
       {/* --- PRICES TAB --- */}
       {activeTab === 'prices' && (
         <div className="space-y-4">
-           <button onClick={() => setEditingPrice({ name: '', price: undefined, category: '' })} className="w-full py-3 bg-brand-600 text-white rounded-xl font-semibold flex items-center justify-center gap-2 shadow-lg shadow-brand-500/30">
+           <button onClick={() => setEditingPrice({ name: '', price: undefined, category: '', coefficient: 1 })} className="w-full py-3 bg-brand-600 text-white rounded-xl font-semibold flex items-center justify-center gap-2 shadow-lg shadow-brand-500/30">
             <Plus className="w-5 h-5" /> Добавить услугу
           </button>
           <div className="space-y-2">
@@ -644,7 +647,10 @@ const AdminView: React.FC<AdminViewProps> = ({
                         <div className="font-medium text-gray-900">{item.name}</div>
                     </div>
                     <div className="flex items-center gap-3">
-                        <span className="font-bold text-gray-700">{item.price} ₽</span>
+                        <div className="text-right">
+                          <div className="font-bold text-gray-700">{item.price} ₽</div>
+                          <div className="text-xs text-gray-400">×{item.coefficient ?? 1}</div>
+                        </div>
                         <button onClick={() => setEditingPrice(item)} className="p-2 bg-gray-50 text-gray-600 rounded-lg"><Edit2 className="w-4 h-4" /></button>
                         <button onClick={() => handleDeletePrice(item.id)} className="p-2 bg-red-50 text-red-500 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                     </div>
@@ -731,6 +737,18 @@ const AdminView: React.FC<AdminViewProps> = ({
                 <input list="categories" value={editingPrice.category} onChange={e => setEditingPrice({...editingPrice, category: e.target.value})} className="w-full p-2 border border-gray-300 rounded-lg" placeholder="Категория" />
                 <datalist id="categories">{existingCategories.map(cat => <option key={cat} value={cat} />)}</datalist>
                 <input type="number" value={editingPrice.price === undefined || editingPrice.price === 0 ? '' : editingPrice.price} onChange={e => setEditingPrice({...editingPrice, price: Number(e.target.value)})} className="w-full p-3 border border-gray-300 rounded-xl text-xl font-bold" placeholder="0" />
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={editingPrice.coefficient === undefined || editingPrice.coefficient === 1 ? '' : editingPrice.coefficient}
+                  onChange={e => setEditingPrice({
+                    ...editingPrice,
+                    coefficient: e.target.value === '' ? undefined : Number(e.target.value)
+                  })}
+                  className="w-full p-2 border border-gray-300 rounded-lg"
+                  placeholder="Коэффициент (по умолчанию 1)"
+                />
             </div>
             <div className="flex gap-3 mt-6">
               <button onClick={() => setEditingPrice(null)} className="flex-1 py-2 text-gray-500" disabled={isLoading}>Отмена</button>

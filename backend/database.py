@@ -1,4 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text
 from datetime import datetime
 
 db = SQLAlchemy()
@@ -58,6 +59,7 @@ class PriceItem(db.Model):
     category = db.Column(db.String(255), nullable=False)
     name = db.Column(db.String(255), nullable=False)
     price = db.Column(db.Integer, nullable=False, default=0)
+    coefficient = db.Column(db.Float, nullable=False, default=1.0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def to_dict(self):
@@ -65,7 +67,8 @@ class PriceItem(db.Model):
             'id': str(self.id),
             'category': self.category,
             'name': self.name,
-            'price': self.price
+            'price': self.price,
+            'coefficient': self.coefficient
         }
 
 
@@ -151,21 +154,33 @@ def init_db(app):
     """Initialize database with sample data if empty"""
     with app.app_context():
         db.create_all()
+
+        # Lightweight migration for existing SQLite DBs (add coefficient column)
+        try:
+            columns = db.session.execute(text("PRAGMA table_info(price_items)")).fetchall()
+            column_names = {row[1] for row in columns}
+            if 'coefficient' not in column_names:
+                db.session.execute(text(
+                    "ALTER TABLE price_items ADD COLUMN coefficient FLOAT NOT NULL DEFAULT 1.0"
+                ))
+                db.session.commit()
+        except Exception:
+            db.session.rollback()
         
         # Check if we need to seed data
         if PriceItem.query.count() == 0:
             # Seed price items
             prices = [
-                PriceItem(category='Датчики', name='Монтаж датчика протечки', price=500),
-                PriceItem(category='Датчики', name='Монтаж датчика движения', price=600),
-                PriceItem(category='Датчики', name='Настройка датчика открытия', price=450),
-                PriceItem(category='Инфраструктура', name='Установка и настройка Хаба', price=1500),
-                PriceItem(category='Инфраструктура', name='Расключение реле в щите', price=1200),
-                PriceItem(category='Инфраструктура', name='Укладка кабеля (за м)', price=100),
-                PriceItem(category='Освещение', name='Установка умного выключателя', price=800),
-                PriceItem(category='Освещение', name='Контроллер RGB ленты', price=950),
-                PriceItem(category='Пусконаладка', name='Программирование сценариев', price=2000),
-                PriceItem(category='Пусконаладка', name='Настройка приложения клиента', price=1000),
+                PriceItem(category='Датчики', name='Монтаж датчика протечки', price=500, coefficient=1.0),
+                PriceItem(category='Датчики', name='Монтаж датчика движения', price=600, coefficient=1.0),
+                PriceItem(category='Датчики', name='Настройка датчика открытия', price=450, coefficient=1.0),
+                PriceItem(category='Инфраструктура', name='Установка и настройка Хаба', price=1500, coefficient=1.0),
+                PriceItem(category='Инфраструктура', name='Расключение реле в щите', price=1200, coefficient=1.0),
+                PriceItem(category='Инфраструктура', name='Укладка кабеля (за м)', price=100, coefficient=1.0),
+                PriceItem(category='Освещение', name='Установка умного выключателя', price=800, coefficient=1.0),
+                PriceItem(category='Освещение', name='Контроллер RGB ленты', price=950, coefficient=1.0),
+                PriceItem(category='Пусконаладка', name='Программирование сценариев', price=2000, coefficient=1.0),
+                PriceItem(category='Пусконаладка', name='Настройка приложения клиента', price=1000, coefficient=1.0),
             ]
             db.session.add_all(prices)
             

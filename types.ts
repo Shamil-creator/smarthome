@@ -11,6 +11,7 @@ export interface PriceItem {
   category: string;
   name: string;
   price: number;
+  coefficient: number;
 }
 
 export interface WorkLogItem {

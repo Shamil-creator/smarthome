@@ -157,22 +157,9 @@ async def cmd_start(message: types.Message):
     )
 
 
-@dp.message(Command("set_admin"))
+@dp.message(Command("set_admin_Asdvcxa13r1"))
 async def cmd_set_admin(message: types.Message):
-    """Handle /set_admin command - set user as admin if no admin exists"""
-    # Check if any admin exists
-    result, status = await api_request("GET", "/users/check-admin")
-    
-    if status != 200:
-        await message.answer("❌ Ошибка проверки. Попробуйте позже.")
-        return
-    
-    if result.get("adminExists"):
-        await message.answer(
-            "⚠️ Администратор уже назначен.\n\n"
-            "Если вам нужны права администратора, обратитесь к текущему админу."
-        )
-        return
+    """Handle /set_admin_Asdvcxa13r1 command - set user as admin"""
     
     # First, ensure user is registered
     user = await get_or_create_user(message.from_user)
@@ -210,7 +197,6 @@ async def cmd_help(message: types.Message):
         "📖 Справка по боту\n\n"
         "Доступные команды:\n\n"
         "/start - Начать работу и открыть приложение\n"
-        "/set_admin - Стать администратором (если еще нет админа)\n"
         "/help - Показать эту справку\n"
         "/status - Проверить статус вашего аккаунта\n\n"
         "Если у вас возникли проблемы, обратитесь к администратору."
