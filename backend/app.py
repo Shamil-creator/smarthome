@@ -9,6 +9,32 @@ from flask_limiter.util import get_remote_address
 from database import db, init_db, User
 from pathlib import Path
 
+# Load .env file if it exists (project root or current directory)
+try:
+    from dotenv import load_dotenv
+    env_path = Path(__file__).parent.parent / '.env'
+    if env_path.exists():
+        load_dotenv(env_path, override=True)
+    else:
+        env_path = Path('.env')
+        if env_path.exists():
+            load_dotenv(env_path, override=True)
+except ImportError:
+    # python-dotenv not installed, try manual parsing
+    try:
+        env_path = Path(__file__).parent.parent / '.env'
+        if not env_path.exists():
+            env_path = Path('.env')
+        if env_path.exists():
+            with open(env_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, value = line.split('=', 1)
+                        os.environ[key.strip()] = value.strip()
+    except Exception:
+        pass
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO if os.getenv('FLASK_ENV') == 'production' else logging.DEBUG,
@@ -85,12 +111,14 @@ from routes.objects import objects_bp
 from routes.prices import prices_bp
 from routes.schedule import schedule_bp
 from routes.docs import docs_bp
+from routes.reports import reports_bp
 
 app.register_blueprint(users_bp, url_prefix='/api')
 app.register_blueprint(objects_bp, url_prefix='/api')
 app.register_blueprint(prices_bp, url_prefix='/api')
 app.register_blueprint(schedule_bp, url_prefix='/api')
 app.register_blueprint(docs_bp, url_prefix='/api')
+app.register_blueprint(reports_bp, url_prefix='/api')
 
 
 def get_current_user():
