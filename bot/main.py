@@ -1,11 +1,14 @@
 import asyncio
+import io
 import logging
 import os
 import aiohttp
 from pathlib import Path
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
-from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
+from aiohttp import web
+from openpyxl import Workbook
 
 # Load .env file if it exists
 try:
@@ -49,6 +52,8 @@ logger = logging.getLogger(__name__)
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 WEBAPP_URL = os.getenv("WEBAPP_URL")
 API_URL = os.getenv("API_URL", "http://localhost:5001/api")
+REPORT_BOT_SECRET = os.getenv("REPORT_BOT_SECRET")
+BOT_INTERNAL_PORT = int(os.getenv("BOT_INTERNAL_PORT", "8081"))
 
 # Validate required environment variables
 if not BOT_TOKEN:
@@ -58,10 +63,94 @@ if not WEBAPP_URL:
 
 logger.info(f"WEBAPP_URL: {WEBAPP_URL}")
 logger.info(f"API_URL: {API_URL}")
+logger.info(f"BOT_INTERNAL_PORT: {BOT_INTERNAL_PORT}")
 
 # Initialize bot and dispatcher
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
+
+def generate_user_report_xlsx(payload: dict) -> bytes:
+    user = payload.get("user", {})
+    summary = payload.get("summary", {})
+    days = payload.get("days", [])
+
+    wb = Workbook()
+    ws_summary = wb.active
+    ws_summary.title = "Summary"
+    ws_summary.append(["Поле", "Значение"])
+    ws_summary.append(["Пользователь", user.get("name") or ""])
+    ws_summary.append(["Роль", user.get("role") or ""])
+    ws_summary.append(["Период", "Все время"])
+    ws_summary.append(["Кол-во дней", summary.get("totalDays", 0)])
+    ws_summary.append(["Сумма", summary.get("totalEarnings", 0)])
+    ws_summary.append(["Сформирован", payload.get("generatedAt") or ""])
+
+    ws_history = wb.create_sheet("History")
+    ws_history.append(["Дата", "Объект", "Адрес", "Статус", "Заработок", "Работы"])
+
+    if days:
+        for day in days:
+            obj = day.get("object") or {}
+            work_log = day.get("workLog") or []
+            works = "; ".join([f"{item.get('name', '')} x{item.get('quantity', 0)}" for item in work_log if item]) or "Нет данных"
+            ws_history.append([
+                day.get("date") or "",
+                obj.get("name") or "-",
+                obj.get("address") or "-",
+                day.get("status") or "",
+                day.get("earnings") or 0,
+                works,
+            ])
+    else:
+        ws_history.append(["Нет данных", "", "", "", "", ""])
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return buffer.read()
+
+
+async def handle_user_report_request(request: web.Request) -> web.Response:
+    secret = request.headers.get("X-Report-Secret")
+    if not REPORT_BOT_SECRET or secret != REPORT_BOT_SECRET:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return web.json_response({"error": "Invalid JSON"}, status=400)
+
+    admin_id = payload.get("adminTelegramId")
+    if not admin_id:
+        return web.json_response({"error": "adminTelegramId is required"}, status=400)
+
+    try:
+        report_bytes = generate_user_report_xlsx(payload)
+        user_name = (payload.get("user") or {}).get("name", "user")
+        filename = f"report_{user_name}.xlsx".replace(" ", "_")
+        document = BufferedInputFile(report_bytes, filename=filename)
+        await bot.send_document(
+            chat_id=int(admin_id),
+            document=document,
+            caption="Отчет о пользователе",
+        )
+    except Exception as exc:
+        logger.exception(f"Failed to generate/send report: {exc}")
+        return web.json_response({"error": "Failed to send report"}, status=500)
+
+    return web.json_response({"success": True})
+
+
+async def start_internal_server() -> web.AppRunner:
+    app = web.Application()
+    app.router.add_post("/internal/report/user", handle_user_report_request)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, host="0.0.0.0", port=BOT_INTERNAL_PORT)
+    await site.start()
+    logger.info("Internal report server started")
+    return runner
 
 
 async def api_request(method: str, endpoint: str, data: dict = None, telegram_id: int = None):
@@ -239,9 +328,13 @@ async def main():
     
     # Delete webhook before polling
     await bot.delete_webhook(drop_pending_updates=True)
-    
-    # Start polling
-    await dp.start_polling(bot)
+
+    runner = await start_internal_server()
+    try:
+        # Start polling
+        await dp.start_polling(bot)
+    finally:
+        await runner.cleanup()
 
 
 if __name__ == "__main__":

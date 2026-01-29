@@ -359,6 +359,16 @@ export const scheduleApi = {
   },
 };
 
+// ==================== Reports API ====================
+
+export const reportsApi = {
+  requestUserReport: async (userId: number): Promise<{ success: boolean }> => {
+    return apiRequest<{ success: boolean }>(`/reports/users/${userId}/request`, {
+      method: 'POST',
+    });
+  },
+};
+
 // ==================== Docs API ====================
 
 export const docsApi = {

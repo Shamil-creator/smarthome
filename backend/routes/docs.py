@@ -128,7 +128,7 @@ def get_doc(doc_id):
 @require_admin
 def create_doc():
     """Create a new document (admin only)"""
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({'error': 'No data provided'}), 400
     
@@ -186,7 +186,7 @@ def update_doc(doc_id):
     if not doc:
         return jsonify({'error': 'Document not found'}), 404
     
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({'error': 'No data provided'}), 400
     

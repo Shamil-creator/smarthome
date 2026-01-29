@@ -32,7 +32,7 @@ def get_object(object_id):
 @require_admin
 def create_object():
     """Create a new client object (admin only)"""
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({'error': 'No data provided'}), 400
     
@@ -62,7 +62,7 @@ def update_object(object_id):
     if not obj:
         return jsonify({'error': 'Object not found'}), 404
     
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({'error': 'No data provided'}), 400
     

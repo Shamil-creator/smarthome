@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { ClientObject, PriceItem, User, ScheduledDay, DocItem, isAccruedStatus, ReportStatus } from '../types';
-import { objectsApi, pricesApi, docsApi, scheduleApi } from '../services/api';
+import { objectsApi, pricesApi, docsApi, scheduleApi, reportsApi } from '../services/api';
 import { Settings, Plus, Trash2, Edit2, Building, DollarSign, Users, FileText, ChevronRight, ChevronDown, ChevronUp, ExternalLink, Loader2, Upload, X, Image as ImageIcon, Download, CheckCircle, Clock, Banknote } from 'lucide-react';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
@@ -360,6 +360,20 @@ const AdminView: React.FC<AdminViewProps> = ({
     }
   };
 
+  const handleGenerateUserReport = async () => {
+    if (!selectedUser) return;
+    setIsLoading(true);
+    try {
+      await reportsApi.requestUserReport(selectedUser.id);
+      alert('Отчет сформирован и отправлен в бот');
+    } catch (err: any) {
+      console.error('Error requesting user report:', err);
+      alert(err?.message || 'Ошибка формирования отчета');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Helper to get status badge
   const getStatusBadge = (status: ReportStatus) => {
     switch(status) {
@@ -448,6 +462,18 @@ const AdminView: React.FC<AdminViewProps> = ({
                                   <div className="text-xs text-green-700 font-bold uppercase">Одобрено</div>
                                   <div className="text-xl font-bold text-green-900">{getUserStats(selectedUser.id).approved.toLocaleString()} ₽</div>
                               </div>
+                          </div>
+
+                          <div className="mt-4">
+                            <button
+                              onClick={handleGenerateUserReport}
+                              disabled={isLoading}
+                              className="w-full py-2 bg-brand-600 text-white rounded-xl font-medium shadow-lg shadow-brand-500/30 active:scale-95 transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                              {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                              <Download className="w-4 h-4" />
+                              Сформировать отчет
+                            </button>
                           </div>
                       </div>
                       

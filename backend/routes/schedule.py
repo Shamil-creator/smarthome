@@ -163,7 +163,7 @@ def get_schedule():
 @require_auth
 def create_or_update_schedule():
     """Create or update a scheduled day"""
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({'error': 'No data provided'}), 400
     
@@ -268,7 +268,7 @@ def update_schedule(schedule_id):
     if not can_edit_report(scheduled_day, g.current_user):
         return jsonify({'error': 'Access denied. Cannot edit this report.'}), 403
     
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({'error': 'No data provided'}), 400
     
@@ -307,7 +307,7 @@ def complete_work():
     - If report exists and is editable, updates it
     - Recalculates earnings based on work log
     """
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({'error': 'No data provided'}), 400
     
@@ -400,7 +400,7 @@ def edit_report(schedule_id):
     if not can_edit_report(scheduled_day, g.current_user):
         return jsonify({'error': 'Access denied. Cannot edit this report.'}), 403
     
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({'error': 'No data provided'}), 400
     
@@ -453,7 +453,7 @@ def approve_report(schedule_id):
     if scheduled_day.status != 'pending_approval':
         return jsonify({'error': f'Cannot approve report with status "{scheduled_day.status}". Must be "pending_approval".'}), 400
     
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     
     # Admin can optionally modify work log before approving
     if 'workLog' in data:

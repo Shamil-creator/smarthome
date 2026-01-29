@@ -24,7 +24,7 @@ def get_users():
 @optional_auth
 def create_user():
     """Create a new user (self-registration or admin can create)"""
-    data = request.get_json()
+    data = request.get_json(silent=True)
     
     if not data:
         return jsonify({'error': 'No data provided'}), 400
@@ -69,7 +69,7 @@ def update_user(user_id):
     if not user:
         return jsonify({'error': 'User not found'}), 404
     
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({'error': 'No data provided'}), 400
     
@@ -92,7 +92,7 @@ def update_user(user_id):
 @optional_auth
 def set_admin():
     """Set user as admin"""
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({'error': 'No data provided'}), 400
     

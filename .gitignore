@@ -39,3 +39,17 @@ __pycache__/
 # Database
 *.db
 backend/instance/
+
+# Tests (ignored by request)
+**/__tests__/
+**/*.test.*
+**/*.spec.*
+tests/
+backend/tests/
+bot/tests/
+
+# Test artifacts
+coverage/
+.pytest_cache/
+test-results/
+playwright-report/

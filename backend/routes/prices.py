@@ -27,7 +27,7 @@ def get_price(price_id):
 @require_admin
 def create_price():
     """Create a new price item (admin only)"""
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({'error': 'No data provided'}), 400
     
@@ -70,7 +70,7 @@ def update_price(price_id):
     if not price_item:
         return jsonify({'error': 'Price item not found'}), 404
     
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({'error': 'No data provided'}), 400
     
