@@ -295,9 +295,22 @@ def require_auth(f):
         telegram_user, db_user = get_telegram_user_from_request()
         
         if not telegram_user:
+            # #region agent log
+            _debug_log("C", "backend/auth.py:require_auth", "auth_failed_no_telegram_user", {
+                "path": request.path,
+                "method": request.method,
+            })
+            # #endregion
             return jsonify({'error': 'Authentication required'}), 401
         
         if not db_user:
+            # #region agent log
+            _debug_log("D", "backend/auth.py:require_auth", "auth_failed_user_not_found", {
+                "telegram_id": telegram_user.get("id") if isinstance(telegram_user, dict) else None,
+                "path": request.path,
+                "method": request.method,
+            })
+            # #endregion
             return jsonify({'error': 'User not found. Please register first.'}), 404
         
         # Store in Flask's g object for use in the route
