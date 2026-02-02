@@ -23,6 +23,44 @@
         }
       }
     </script>
+    <script>
+      (function () {
+        function send(message, data) {
+          try {
+            fetch('/api/debug/log', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                sessionId: 'debug-session',
+                runId: 'pre-fix',
+                hypothesisId: 'I',
+                location: 'index.html:boot',
+                message: message,
+                data: data || {},
+                timestamp: Date.now()
+              })
+            });
+          } catch (_) {}
+        }
+
+        send('boot_start', { userAgent: navigator.userAgent });
+
+        window.addEventListener('error', function (e) {
+          send('window_error', {
+            message: e.message,
+            filename: e.filename,
+            lineno: e.lineno,
+            colno: e.colno
+          });
+        });
+
+        window.addEventListener('unhandledrejection', function (e) {
+          send('unhandled_rejection', {
+            reason: e.reason && e.reason.message ? e.reason.message : String(e.reason || 'unknown')
+          });
+        });
+      })();
+    </script>
     <style>
       /* Hide scrollbar for cleaner mobile UI */
       .no-scrollbar::-webkit-scrollbar {
