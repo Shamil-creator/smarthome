@@ -9,6 +9,13 @@ users_bp = Blueprint('users', __name__)
 @require_auth
 def get_current_user():
     """Get current user by Telegram ID from header"""
+    # #region agent log
+    from auth import _debug_log
+    _debug_log("E", "backend/routes/users.py:get_current_user", "user_me_response", {
+        "user_id": getattr(g.current_user, "id", None),
+        "telegram_id": getattr(g.current_user, "telegram_id", None),
+    })
+    # #endregion
     return jsonify(g.current_user.to_dict())
 
 

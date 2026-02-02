@@ -316,6 +316,14 @@ def require_auth(f):
         # Store in Flask's g object for use in the route
         g.telegram_user = telegram_user
         g.current_user = db_user
+        # #region agent log
+        _debug_log("D", "backend/auth.py:require_auth", "auth_success", {
+            "telegram_id": telegram_user.get("id") if isinstance(telegram_user, dict) else None,
+            "user_id": getattr(db_user, "id", None),
+            "path": request.path,
+            "method": request.method,
+        })
+        # #endregion
         
         return f(*args, **kwargs)
     return decorated_function
