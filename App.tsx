@@ -211,6 +211,53 @@ const App: React.FC = () => {
     loadViewData();
   }, [currentView, loadObjects, loadPrices, loadDocs, loadUsers]);
 
+  // === Refresh functions with force reload (fallback) ===
+  const refreshSchedule = useCallback(async () => {
+    try {
+      const scheduleData = await scheduleApi.getAll();
+      setSchedule(scheduleData.map(adaptScheduledDay));
+    } catch (err) {
+      console.error('Error refreshing schedule:', err);
+    }
+  }, []);
+
+  const refreshObjects = useCallback(async () => {
+    await loadObjects(true);
+  }, [loadObjects]);
+
+  const refreshPrices = useCallback(async () => {
+    await loadPrices(true);
+  }, [loadPrices]);
+
+  const refreshGeneralDocs = useCallback(async () => {
+    await loadDocs(true);
+  }, [loadDocs]);
+
+  const refreshUsers = useCallback(async () => {
+    await loadUsers(true);
+  }, [loadUsers]);
+
+  const refreshOnResume = useCallback(async () => {
+    clearApiCache();
+    let user = currentUser;
+    if (!user) {
+      user = await usersApi.getCurrentUser();
+      if (user) {
+        setCurrentUser(user);
+      }
+    }
+    if (!user) return;
+    await refreshSchedule();
+    const refreshTasks: Promise<void>[] = [];
+    if (dataLoaded.objects) refreshTasks.push(loadObjects(true));
+    if (dataLoaded.prices) refreshTasks.push(loadPrices(true));
+    if (dataLoaded.docs) refreshTasks.push(loadDocs(true));
+    if (dataLoaded.users) refreshTasks.push(loadUsers(true));
+    if (refreshTasks.length > 0) {
+      await Promise.all(refreshTasks);
+    }
+  }, [currentUser, dataLoaded, loadDocs, loadObjects, loadPrices, loadUsers, refreshSchedule]);
+
   // === Real-time Polling for Schedule Updates ===
   // Polls schedule data every 10 seconds to show status changes in real-time
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -325,53 +372,6 @@ const App: React.FC = () => {
   const removeDoc = useCallback((docId: string) => {
     setGeneralDocs(prev => prev.filter(doc => doc.id !== docId));
   }, []);
-
-  // Refresh functions with force reload (fallback)
-  const refreshSchedule = useCallback(async () => {
-    try {
-      const scheduleData = await scheduleApi.getAll();
-      setSchedule(scheduleData.map(adaptScheduledDay));
-    } catch (err) {
-      console.error('Error refreshing schedule:', err);
-    }
-  }, []);
-
-  const refreshObjects = useCallback(async () => {
-    await loadObjects(true);
-  }, [loadObjects]);
-
-  const refreshPrices = useCallback(async () => {
-    await loadPrices(true);
-  }, [loadPrices]);
-
-  const refreshGeneralDocs = useCallback(async () => {
-    await loadDocs(true);
-  }, [loadDocs]);
-
-  const refreshUsers = useCallback(async () => {
-    await loadUsers(true);
-  }, [loadUsers]);
-
-  const refreshOnResume = useCallback(async () => {
-    clearApiCache();
-    let user = currentUser;
-    if (!user) {
-      user = await usersApi.getCurrentUser();
-      if (user) {
-        setCurrentUser(user);
-      }
-    }
-    if (!user) return;
-    await refreshSchedule();
-    const refreshTasks: Promise<void>[] = [];
-    if (dataLoaded.objects) refreshTasks.push(loadObjects(true));
-    if (dataLoaded.prices) refreshTasks.push(loadPrices(true));
-    if (dataLoaded.docs) refreshTasks.push(loadDocs(true));
-    if (dataLoaded.users) refreshTasks.push(loadUsers(true));
-    if (refreshTasks.length > 0) {
-      await Promise.all(refreshTasks);
-    }
-  }, [currentUser, dataLoaded, loadDocs, loadObjects, loadPrices, loadUsers, refreshSchedule]);
 
   // Filter schedule for the current logged-in user (memoized)
   const mySchedule = useMemo(() => {
