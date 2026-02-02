@@ -37,6 +37,26 @@ def _get_int_env(name: str, default: int) -> int:
 # Maximum age of initData in seconds (default: 1 day)
 MAX_INIT_DATA_AGE = _get_int_env("INIT_DATA_MAX_AGE", 86400)
 
+# Debug log path (NDJSON)
+DEBUG_LOG_PATH = "/tmp/debug.log"
+
+
+def _debug_log(hypothesis_id: str, location: str, message: str, data: dict | None = None) -> None:
+    payload = {
+        "sessionId": "debug-session",
+        "runId": "pre-fix",
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data or {},
+        "timestamp": int(time.time() * 1000),
+    }
+    try:
+        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
 # Skip validation in development mode (set to "true" to skip)
 # Automatically enabled if FLASK_ENV is not "production" and BOT_TOKEN is not set
 FLASK_ENV = os.getenv("FLASK_ENV", "development")
@@ -71,7 +91,18 @@ def validate_telegram_init_data(init_data: str, bot_token: str = None) -> dict |
     Returns:
         Parsed user data dict if valid, None if invalid
     """
+    # #region agent log
+    _debug_log("A", "backend/auth.py:validate_telegram_init_data", "enter", {
+        "has_init_data": bool(init_data),
+        "init_data_len": len(init_data) if init_data else 0,
+        "max_age": MAX_INIT_DATA_AGE,
+        "has_bot_token": bool(bot_token or BOT_TOKEN),
+    })
+    # #endregion
     if not init_data:
+        # #region agent log
+        _debug_log("A", "backend/auth.py:validate_telegram_init_data", "missing_init_data")
+        # #endregion
         logger.warning("AUTH: Missing initData")
         return None
     
@@ -89,12 +120,18 @@ def validate_telegram_init_data(init_data: str, bot_token: str = None) -> dict |
         # Extract hash
         received_hash = parsed.get('hash', [None])[0]
         if not received_hash:
+            # #region agent log
+            _debug_log("B", "backend/auth.py:validate_telegram_init_data", "missing_hash")
+            # #endregion
             logger.warning("AUTH: Missing hash in initData")
             return None
         
         # Check auth_date is not too old
         auth_date_str = parsed.get('auth_date', [None])[0]
         if not auth_date_str:
+            # #region agent log
+            _debug_log("A", "backend/auth.py:validate_telegram_init_data", "missing_auth_date")
+            # #endregion
             logger.warning("AUTH: Missing auth_date in initData")
             return None
         
@@ -102,9 +139,17 @@ def validate_telegram_init_data(init_data: str, bot_token: str = None) -> dict |
             auth_date = int(auth_date_str)
             age_seconds = time.time() - auth_date
             if MAX_INIT_DATA_AGE > 0 and age_seconds > MAX_INIT_DATA_AGE:
+                # #region agent log
+                _debug_log("A", "backend/auth.py:validate_telegram_init_data", "expired_auth_date", {
+                    "age_seconds": int(age_seconds),
+                })
+                # #endregion
                 logger.warning("AUTH: initData expired (age=%ss, max=%ss)", int(age_seconds), MAX_INIT_DATA_AGE)
                 return None
         except ValueError:
+            # #region agent log
+            _debug_log("A", "backend/auth.py:validate_telegram_init_data", "invalid_auth_date")
+            # #endregion
             logger.warning("AUTH: Invalid auth_date in initData")
             return None
         
@@ -134,16 +179,25 @@ def validate_telegram_init_data(init_data: str, bot_token: str = None) -> dict |
         
         # Constant-time comparison to prevent timing attacks
         if not hmac.compare_digest(computed_hash, received_hash):
+            # #region agent log
+            _debug_log("B", "backend/auth.py:validate_telegram_init_data", "invalid_signature")
+            # #endregion
             logger.warning("AUTH: Invalid initData signature")
             return None
         
         # Parse user data
         user_str = parsed.get('user', [None])[0]
         if not user_str:
+            # #region agent log
+            _debug_log("A", "backend/auth.py:validate_telegram_init_data", "missing_user")
+            # #endregion
             logger.warning("AUTH: Missing user in initData")
             return None
         
         user_data = json.loads(unquote(user_str))
+        # #region agent log
+        _debug_log("A", "backend/auth.py:validate_telegram_init_data", "validated_ok")
+        # #endregion
         return {
             'user': user_data,
             'auth_date': auth_date,
@@ -153,6 +207,9 @@ def validate_telegram_init_data(init_data: str, bot_token: str = None) -> dict |
         }
         
     except (json.JSONDecodeError, KeyError, IndexError, TypeError):
+        # #region agent log
+        _debug_log("A", "backend/auth.py:validate_telegram_init_data", "parse_error")
+        # #endregion
         logger.warning("AUTH: Failed to parse initData")
         return None
 
@@ -191,6 +248,14 @@ def get_telegram_user_from_request() -> tuple[dict | None, User | None]:
     """
     # Try new secure method first (X-Telegram-Init-Data with signature)
     init_data = request.headers.get('X-Telegram-Init-Data')
+    # #region agent log
+    _debug_log("C", "backend/auth.py:get_telegram_user_from_request", "headers_received", {
+        "has_init_data_header": bool(init_data),
+        "has_user_id_header": bool(request.headers.get('X-Telegram-User-Id')),
+        "path": request.path,
+        "method": request.method,
+    })
+    # #endregion
     if init_data:
         validated = validate_telegram_init_data(init_data)
         if validated and validated.get('user'):
