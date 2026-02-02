@@ -71,6 +71,18 @@ const getTelegramInitData = (): string | null => {
   return tg?.initData || null;
 };
 
+const waitForInitData = async (timeoutMs: number = 2000): Promise<string | null> => {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeoutMs) {
+    const initData = getTelegramInitData();
+    if (initData) {
+      return initData;
+    }
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  return null;
+};
+
 // Get Telegram User ID from WebApp (fallback for development)
 const getTelegramUserId = (): string | null => {
   const tg = getTelegramWebApp();
@@ -107,7 +119,11 @@ async function apiRequest<T>(
   }
   
   // Get authentication data
-  const initData = getTelegramInitData();
+  let initData = getTelegramInitData();
+  const tg = getTelegramWebApp();
+  if (!initData && tg) {
+    initData = await waitForInitData();
+  }
   const telegramId = getTelegramUserId();
   
   const headers: HeadersInit = {
@@ -124,11 +140,18 @@ async function apiRequest<T>(
   const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
   try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const requestOptions: RequestInit = {
       ...options,
       headers,
       signal: controller.signal,
-    });
+    };
+    if (!requestOptions.method || requestOptions.method === 'GET') {
+      if (!requestOptions.cache) {
+        requestOptions.cache = 'no-store';
+      }
+    }
+
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, requestOptions);
 
     clearTimeout(timeoutId);
 

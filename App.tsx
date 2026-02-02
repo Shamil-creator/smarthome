@@ -3,7 +3,7 @@ import { HashRouter } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import BottomNav from './components/BottomNav';
 import { ViewState, ScheduledDay, ClientObject, PriceItem, User, DocItem, adaptScheduledDay } from './types';
-import { usersApi, objectsApi, pricesApi, scheduleApi, docsApi, getTelegramUserName, checkApiHealth } from './services/api';
+import { usersApi, objectsApi, pricesApi, scheduleApi, docsApi, getTelegramUserName, checkApiHealth, clearApiCache } from './services/api';
 import { Loader2 } from 'lucide-react';
 
 // Lazy load heavy components for faster initial load
@@ -227,10 +227,12 @@ const App: React.FC = () => {
         // Resume polling and immediately fetch fresh data when tab becomes visible
         isPollingPausedRef.current = false;
         pollScheduleData();
+        refreshOnResume();
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', refreshOnResume);
 
     // Cleanup on unmount
     return () => {
@@ -239,8 +241,9 @@ const App: React.FC = () => {
         pollingIntervalRef.current = null;
       }
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', refreshOnResume);
     };
-  }, [isLoading, currentUser, pollScheduleData]);
+  }, [isLoading, currentUser, pollScheduleData, refreshOnResume]);
 
   // === Incremental Update Functions ===
   // These update the local state directly without full reload
@@ -328,6 +331,27 @@ const App: React.FC = () => {
   const refreshUsers = useCallback(async () => {
     await loadUsers(true);
   }, [loadUsers]);
+
+  const refreshOnResume = useCallback(async () => {
+    clearApiCache();
+    let user = currentUser;
+    if (!user) {
+      user = await usersApi.getCurrentUser();
+      if (user) {
+        setCurrentUser(user);
+      }
+    }
+    if (!user) return;
+    await refreshSchedule();
+    const refreshTasks: Promise<void>[] = [];
+    if (dataLoaded.objects) refreshTasks.push(loadObjects(true));
+    if (dataLoaded.prices) refreshTasks.push(loadPrices(true));
+    if (dataLoaded.docs) refreshTasks.push(loadDocs(true));
+    if (dataLoaded.users) refreshTasks.push(loadUsers(true));
+    if (refreshTasks.length > 0) {
+      await Promise.all(refreshTasks);
+    }
+  }, [currentUser, dataLoaded, loadDocs, loadObjects, loadPrices, loadUsers, refreshSchedule]);
 
   // Filter schedule for the current logged-in user (memoized)
   const mySchedule = useMemo(() => {

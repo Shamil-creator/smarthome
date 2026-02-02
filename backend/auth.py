@@ -19,8 +19,23 @@ logger = logging.getLogger(__name__)
 # MUST be set via environment variable in production
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# Maximum age of initData in seconds (5 minutes)
-MAX_INIT_DATA_AGE = 300
+
+def _get_int_env(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None or value == '':
+        return default
+    try:
+        parsed = int(value)
+        if parsed < 0:
+            raise ValueError()
+        return parsed
+    except ValueError:
+        logger.warning("AUTH: Invalid %s=%r, falling back to %s", name, value, default)
+        return default
+
+
+# Maximum age of initData in seconds (default: 1 day)
+MAX_INIT_DATA_AGE = _get_int_env("INIT_DATA_MAX_AGE", 86400)
 
 # Skip validation in development mode (set to "true" to skip)
 # Automatically enabled if FLASK_ENV is not "production" and BOT_TOKEN is not set
@@ -57,6 +72,7 @@ def validate_telegram_init_data(init_data: str, bot_token: str = None) -> dict |
         Parsed user data dict if valid, None if invalid
     """
     if not init_data:
+        logger.warning("AUTH: Missing initData")
         return None
     
     token = bot_token or BOT_TOKEN
@@ -73,18 +89,23 @@ def validate_telegram_init_data(init_data: str, bot_token: str = None) -> dict |
         # Extract hash
         received_hash = parsed.get('hash', [None])[0]
         if not received_hash:
+            logger.warning("AUTH: Missing hash in initData")
             return None
         
         # Check auth_date is not too old
         auth_date_str = parsed.get('auth_date', [None])[0]
         if not auth_date_str:
+            logger.warning("AUTH: Missing auth_date in initData")
             return None
         
         try:
             auth_date = int(auth_date_str)
-            if time.time() - auth_date > MAX_INIT_DATA_AGE:
+            age_seconds = time.time() - auth_date
+            if MAX_INIT_DATA_AGE > 0 and age_seconds > MAX_INIT_DATA_AGE:
+                logger.warning("AUTH: initData expired (age=%ss, max=%ss)", int(age_seconds), MAX_INIT_DATA_AGE)
                 return None
         except ValueError:
+            logger.warning("AUTH: Invalid auth_date in initData")
             return None
         
         # Build data-check-string (all params except hash, sorted alphabetically)
@@ -113,11 +134,13 @@ def validate_telegram_init_data(init_data: str, bot_token: str = None) -> dict |
         
         # Constant-time comparison to prevent timing attacks
         if not hmac.compare_digest(computed_hash, received_hash):
+            logger.warning("AUTH: Invalid initData signature")
             return None
         
         # Parse user data
         user_str = parsed.get('user', [None])[0]
         if not user_str:
+            logger.warning("AUTH: Missing user in initData")
             return None
         
         user_data = json.loads(unquote(user_str))
@@ -129,7 +152,8 @@ def validate_telegram_init_data(init_data: str, bot_token: str = None) -> dict |
             'chat_instance': parsed.get('chat_instance', [None])[0],
         }
         
-    except (json.JSONDecodeError, KeyError, IndexError, TypeError) as e:
+    except (json.JSONDecodeError, KeyError, IndexError, TypeError):
+        logger.warning("AUTH: Failed to parse initData")
         return None
 
 
