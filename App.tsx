@@ -116,6 +116,9 @@ const App: React.FC = () => {
       
       // Check Telegram WebApp data
       const tg = (window as any).Telegram?.WebApp;
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/9e637a69-941c-49c5-bc56-8847fef0aa11',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'G',location:'App.tsx:initApp',message:'telegram_webapp_state',data:{hasTelegram:!!tg,hasInitData:!!tg?.initData,hasInitDataUnsafeUser:!!tg?.initDataUnsafe?.user,initDataLen:tg?.initData?.length || 0},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       if (tg) {
         tg.ready();
         tg.expand();
@@ -124,12 +127,18 @@ const App: React.FC = () => {
         if (tgUser && tgUser.id) {
           // Try to get existing user
           let user = await usersApi.getCurrentUser();
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/9e637a69-941c-49c5-bc56-8847fef0aa11',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'G',location:'App.tsx:initApp',message:'get_current_user_result',data:{hasUser:!!user,userId:user?.id || null,telegramId:user?.telegramId || null},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
           
           if (!user) {
             // Create new user if not exists
             try {
               const name = getTelegramUserName();
               user = await usersApi.createUser(tgUser.id, name);
+              // #region agent log
+              fetch('http://127.0.0.1:7244/ingest/9e637a69-941c-49c5-bc56-8847fef0aa11',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'G',location:'App.tsx:initApp',message:'create_user_success',data:{userId:user?.id || null,telegramId:user?.telegramId || null},timestamp:Date.now()})}).catch(()=>{});
+              // #endregion
             } catch (err: any) {
               // User might already exist (race condition)
               if (err.message?.includes('already exists')) {
@@ -140,6 +149,9 @@ const App: React.FC = () => {
           
           if (user) {
             setCurrentUser(user);
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/9e637a69-941c-49c5-bc56-8847fef0aa11',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'G',location:'App.tsx:initApp',message:'set_current_user',data:{userId:user.id,telegramId:user.telegramId || null},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
           }
         }
       } else {
@@ -168,6 +180,14 @@ const App: React.FC = () => {
     
     initApp();
   }, []);
+
+  useEffect(() => {
+    if (!isLoading && !currentUser) {
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/9e637a69-941c-49c5-bc56-8847fef0aa11',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'G',location:'App.tsx:auth_screen',message:'current_user_missing_after_init',data:{hasError:!!error},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+    }
+  }, [isLoading, currentUser, error]);
 
   // Load data when view changes (lazy loading)
   useEffect(() => {
