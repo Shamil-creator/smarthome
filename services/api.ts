@@ -125,7 +125,7 @@ async function apiRequest<T>(
     initData = await waitForInitData();
   }
   // #region agent log
-  fetch('http://127.0.0.1:7244/ingest/9e637a69-941c-49c5-bc56-8847fef0aa11',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'C',location:'services/api.ts:apiRequest',message:'auth_headers_state',data:{endpoint,method:options.method || 'GET',hasInitData:!!initData,hasTelegramId:!!getTelegramUserId()},timestamp:Date.now()})}).catch(()=>{});
+  fetch('/api/debug/log',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'C',location:'services/api.ts:apiRequest',message:'auth_headers_state',data:{endpoint,method:options.method || 'GET',hasInitData:!!initData,hasTelegramId:!!getTelegramUserId()},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
   const telegramId = getTelegramUserId();
   

@@ -161,6 +161,24 @@ def health_check():
     return jsonify({'status': 'ok'})
 
 
+# Temporary debug log endpoint for frontend instrumentation
+DEBUG_LOG_PATH = '/tmp/debug.log'
+
+@app.route('/api/debug/log', methods=['POST'])
+@limiter.exempt
+def debug_log():
+    """Receive debug logs from frontend and append to /tmp/debug.log"""
+    import json
+    data = request.get_json(silent=True)
+    if data:
+        try:
+            with open(DEBUG_LOG_PATH, 'a') as f:
+                f.write(json.dumps(data) + '\n')
+        except Exception:
+            pass
+    return jsonify({'ok': True})
+
+
 @app.route('/api/files/<path:filename>', methods=['GET'])
 def serve_uploaded_file(filename):
     """Serve uploaded files from the uploads directory with path traversal protection."""
