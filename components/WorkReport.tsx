@@ -60,19 +60,44 @@ const WorkReport: React.FC<WorkReportProps> = ({
     return Array.from(new Set(priceList.map(p => p.category)));
   }, [priceList]);
 
-  const updateQuantity = (id: string, delta: number) => {
+  const setQuantity = (id: string, quantity: number) => {
     if (!isEditable) return;
     setLog(prev => {
+      if (quantity <= 0) return prev.filter(item => item.itemId !== id);
       const existing = prev.find(item => item.itemId === id);
       if (existing) {
-        const newQty = existing.quantity + delta;
-        if (newQty <= 0) return prev.filter(item => item.itemId !== id);
-        return prev.map(item => item.itemId === id ? { ...item, quantity: newQty } : item);
-      } else if (delta > 0) {
-        return [...prev, { itemId: id, quantity: 1 }];
+        return prev.map(item => item.itemId === id ? { ...item, quantity } : item);
       }
-      return prev;
+      return [...prev, { itemId: id, quantity }];
     });
+  };
+
+  const updateQuantity = (id: string, delta: number) => {
+    if (!isEditable) return;
+    const current = getQuantity(id);
+    setQuantity(id, current + delta);
+  };
+
+  const normalizeQuantityInput = (raw: string): string => {
+    const digitsOnly = raw.replace(/\D+/g, '');
+    if (digitsOnly === '') return '';
+    const withoutLeadingZeros = digitsOnly.replace(/^0+/, '');
+    return withoutLeadingZeros === '' ? '' : withoutLeadingZeros;
+  };
+
+  const handleQuantityInput = (id: string, raw: string) => {
+    if (!isEditable) return;
+    const normalized = normalizeQuantityInput(raw);
+    if (normalized === '') {
+      setQuantity(id, 0);
+      return;
+    }
+    const quantity = Number(normalized);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setQuantity(id, 0);
+      return;
+    }
+    setQuantity(id, quantity);
   };
 
   const getQuantity = (id: string) => log.find(item => item.itemId === id)?.quantity || 0;
@@ -233,9 +258,16 @@ const WorkReport: React.FC<WorkReportProps> = ({
                         >
                           <Minus className="w-4 h-4" />
                         </button>
-                        <span className={`w-8 text-center font-bold ${qty > 0 ? 'text-gray-900' : 'text-gray-300'}`}>
-                          {qty}
-                        </span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          value={qty === 0 ? '' : String(qty)}
+                          onChange={(e) => handleQuantityInput(item.id, e.target.value)}
+                          placeholder="0"
+                          className="w-12 h-8 mx-1 text-center font-bold text-gray-900 bg-white rounded-md border border-gray-200 focus:ring-2 focus:ring-brand-500 outline-none"
+                          aria-label={`Количество для ${item.name}`}
+                        />
                         <button 
                           onClick={() => updateQuantity(item.id, 1)}
                           className="w-8 h-8 flex items-center justify-center rounded-md bg-white shadow-sm text-brand-600 active:bg-gray-100"
