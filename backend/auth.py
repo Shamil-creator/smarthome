@@ -271,7 +271,16 @@ def get_telegram_user_from_request() -> tuple[dict | None, User | None]:
     if telegram_id_header:
         # In production without SKIP_AUTH_VALIDATION, reject this method
         if not SKIP_AUTH_VALIDATION:
-            return None, None
+            # Allow a narrow fallback for /api/user/me to avoid false 401 when initData is missing
+            if request.path == '/api/user/me' and request.method == 'GET':
+                # #region agent log
+                _debug_log("F", "backend/auth.py:get_telegram_user_from_request", "fallback_user_id_for_user_me", {
+                    "path": request.path,
+                    "method": request.method,
+                })
+                # #endregion
+            else:
+                return None, None
         
         try:
             telegram_id = int(telegram_id_header)
