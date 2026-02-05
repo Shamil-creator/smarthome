@@ -11,12 +11,12 @@ export interface PriceItem {
   category: string;
   name: string;
   price: number;
-  coefficient: number;
 }
 
 export interface WorkLogItem {
   itemId: string;
   quantity: number;
+  coefficient?: number; // Set by admin during approval, defaults to 1.0
 }
 
 export interface ClientObject {

@@ -105,7 +105,8 @@ const WorkReport: React.FC<WorkReportProps> = ({
   const totalEarnings = Math.round(log.reduce((sum, item) => {
     const priceItem = priceList.find(p => p.id === item.itemId);
     const price = priceItem?.price || 0;
-    const coefficient = priceItem?.coefficient ?? 1;
+    // Coefficient is set by admin during approval, defaults to 1
+    const coefficient = item.coefficient ?? 1;
     return sum + (price * coefficient * item.quantity);
   }, 0));
 
@@ -243,9 +244,7 @@ const WorkReport: React.FC<WorkReportProps> = ({
                   <div key={item.id} className="p-4 flex items-center justify-between">
                     <div className="flex-1 pr-4">
                       <div className="font-medium text-gray-900">{item.name}</div>
-                      <div className="text-sm text-gray-500">
-                        {item.price} ₽ × {item.coefficient ?? 1}
-                      </div>
+                      <div className="text-sm text-gray-500">{item.price} ₽</div>
                     </div>
                     {isEditable ? (
                       <div className="flex items-center bg-gray-50 rounded-lg p-1">

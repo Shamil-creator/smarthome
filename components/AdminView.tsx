@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { ClientObject, PriceItem, User, ScheduledDay, DocItem, isAccruedStatus, ReportStatus } from '../types';
+import { ClientObject, PriceItem, User, ScheduledDay, DocItem, isAccruedStatus, ReportStatus, WorkLogItem } from '../types';
 import { objectsApi, pricesApi, docsApi, scheduleApi, reportsApi } from '../services/api';
 import { Settings, Plus, Trash2, Edit2, Building, DollarSign, Users, FileText, ChevronRight, ChevronDown, ChevronUp, ExternalLink, Loader2, Upload, X, Image as ImageIcon, Download, CheckCircle, Clock, Banknote } from 'lucide-react';
 
@@ -44,6 +44,9 @@ const AdminView: React.FC<AdminViewProps> = ({
   
   // State for expanding history items
   const [expandedHistoryIndex, setExpandedHistoryIndex] = useState<number | null>(null);
+  
+  // State for editing coefficients in pending reports (string to allow comma input)
+  const [editingCoefficients, setEditingCoefficients] = useState<Record<string, string>>({});
   
   // File upload state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -168,15 +171,13 @@ const AdminView: React.FC<AdminViewProps> = ({
     setIsLoading(true);
     
     const finalPrice = editingPrice.price || 0;
-    const finalCoefficient = editingPrice.coefficient ?? 1;
     
     try {
       if (editingPrice.id) {
         const updated = await pricesApi.update(editingPrice.id, {
           name: editingPrice.name,
           category: editingPrice.category,
-          price: finalPrice,
-          coefficient: finalCoefficient
+          price: finalPrice
         });
         if (onUpdatePrice) {
           onUpdatePrice(updated);
@@ -187,8 +188,7 @@ const AdminView: React.FC<AdminViewProps> = ({
         const created = await pricesApi.create({
           name: editingPrice.name,
           category: editingPrice.category,
-          price: finalPrice,
-          coefficient: finalCoefficient
+          price: finalPrice
         });
         if (onAddPrice) {
           onAddPrice(created);
@@ -290,6 +290,40 @@ const AdminView: React.FC<AdminViewProps> = ({
   };
 
   // --- Report Workflow Handlers ---
+  
+  const formatCoefficient = (value: number): string => {
+    if (!Number.isFinite(value)) return '1,0';
+    const normalized = Math.abs(value % 1) > 0 ? String(value) : value.toFixed(1);
+    return normalized.replace('.', ',');
+  };
+
+  const parseCoefficient = (raw: string | undefined, fallback: number = 1): number => {
+    if (!raw) return fallback;
+    const normalized = raw.replace(',', '.');
+    const num = parseFloat(normalized);
+    return Number.isFinite(num) && num > 0 ? num : fallback;
+  };
+
+  const getCoefficientInputValue = (
+    dayId: number | undefined,
+    itemId: string,
+    defaultCoeff: number = 1
+  ): string => {
+    const key = `${dayId}-${itemId}`;
+    return editingCoefficients[key] ?? formatCoefficient(defaultCoeff);
+  };
+  
+  // Update coefficient for a work log item
+  const handleCoefficientChange = (dayId: number | undefined, itemId: string, value: string) => {
+    const key = `${dayId}-${itemId}`;
+    const cleaned = value.replace(/[^0-9.,]/g, '').replace(/\./g, ',');
+    const parts = cleaned.split(',');
+    const normalized = parts.length > 1
+      ? `${parts[0]},${parts.slice(1).join('').replace(/,/g, '')}`
+      : cleaned;
+    setEditingCoefficients(prev => ({ ...prev, [key]: normalized }));
+  };
+  
   const handleApproveReport = async (day: ScheduledDay) => {
     if (!day.id) {
       console.error('Cannot approve: day.id is missing', day);
@@ -298,11 +332,33 @@ const AdminView: React.FC<AdminViewProps> = ({
     }
     setIsLoading(true);
     try {
-      const updated = await scheduleApi.approveReport(day.id);
+      // Build workLog with coefficients from local state
+      const workLogWithCoefficients: WorkLogItem[] = (day.workLog || []).map(item => {
+        const coeff = parseCoefficient(
+          editingCoefficients[`${day.id}-${item.itemId}`],
+          item.coefficient ?? 1
+        );
+        return {
+          itemId: item.itemId,
+          quantity: item.quantity,
+          coefficient: coeff > 0 ? coeff : 1
+        };
+      });
+      
+      const updated = await scheduleApi.approveReport(day.id, { workLog: workLogWithCoefficients });
       if (onUpdateScheduleItem) {
         onUpdateScheduleItem(updated);
       } else {
         await onScheduleUpdate();
+      }
+      // Clear local coefficient state for this report
+      const keysToRemove = Object.keys(editingCoefficients).filter(k => k.startsWith(`${day.id}-`));
+      if (keysToRemove.length > 0) {
+        setEditingCoefficients(prev => {
+          const next = { ...prev };
+          keysToRemove.forEach(k => delete next[k]);
+          return next;
+        });
       }
     } catch (err: any) {
       console.error('Error approving report:', err);
@@ -342,9 +398,18 @@ const AdminView: React.FC<AdminViewProps> = ({
     }
     setIsLoading(true);
     try {
-      const newLog = day.workLog.map(item => 
-        item.itemId === itemId ? { ...item, quantity: Math.max(0, newQty) } : item
-      ).filter(item => item.quantity > 0);
+      // Build newLog preserving coefficients from local state
+      const newLog: WorkLogItem[] = day.workLog.map(item => {
+        const coeff = parseCoefficient(
+          editingCoefficients[`${day.id}-${item.itemId}`],
+          item.coefficient ?? 1
+        );
+        return {
+          itemId: item.itemId,
+          quantity: item.itemId === itemId ? Math.max(0, newQty) : item.quantity,
+          coefficient: coeff > 0 ? coeff : 1
+        };
+      }).filter(item => item.quantity > 0);
       
       const updated = await scheduleApi.editReport(day.id, { workLog: newLog });
       if (onUpdateScheduleItem) {
@@ -507,31 +572,58 @@ const AdminView: React.FC<AdminViewProps> = ({
                                               {day.workLog && day.workLog.length > 0 ? (
                                                   day.workLog.map((logItem, logIdx) => {
                                                       const service = priceList.find(p => p.id === logItem.itemId);
+                                                      const coeffValue = parseCoefficient(
+                                                        editingCoefficients[`${day.id}-${logItem.itemId}`],
+                                                        logItem.coefficient ?? 1
+                                                      );
+                                                      const itemTotal = service ? Math.round(service.price * coeffValue * logItem.quantity) : 0;
                                                       return (
-                                                          <div key={logIdx} className="flex justify-between items-center py-1">
-                                                              <span className="text-gray-600 flex-1 pr-4">
+                                                          <div key={logIdx} className="flex justify-between items-center py-2">
+                                                              <span className="text-gray-600 flex-1 pr-2 text-sm">
                                                                 {service?.name || 'Услуга удалена'}
                                                               </span>
-                                                              <div className="flex items-center gap-3">
+                                                              <div className="flex items-center gap-2">
                                                                 {day.status === 'pending_approval' ? (
-                                                                    <div className="flex items-center bg-white rounded border border-gray-200">
-                                                                        <button 
-                                                                          onClick={(e) => { e.stopPropagation(); handleUpdateLogItem(day, logItem.itemId, logItem.quantity - 1); }} 
-                                                                          className="px-2 py-1 text-gray-500 hover:bg-gray-100"
-                                                                          disabled={isLoading}
-                                                                        >-</button>
-                                                                        <span className="px-1 text-xs font-bold">{logItem.quantity}</span>
-                                                                        <button 
-                                                                          onClick={(e) => { e.stopPropagation(); handleUpdateLogItem(day, logItem.itemId, logItem.quantity + 1); }} 
-                                                                          className="px-2 py-1 text-gray-500 hover:bg-gray-100"
-                                                                          disabled={isLoading}
-                                                                        >+</button>
-                                                                    </div>
+                                                                    <>
+                                                                      {/* Quantity controls */}
+                                                                      <div className="flex items-center bg-white rounded border border-gray-200">
+                                                                          <button 
+                                                                            onClick={(e) => { e.stopPropagation(); handleUpdateLogItem(day, logItem.itemId, logItem.quantity - 1); }} 
+                                                                            className="px-2 py-1 text-gray-500 hover:bg-gray-100"
+                                                                            disabled={isLoading}
+                                                                          >-</button>
+                                                                          <span className="px-1 text-xs font-bold">{logItem.quantity}</span>
+                                                                          <button 
+                                                                            onClick={(e) => { e.stopPropagation(); handleUpdateLogItem(day, logItem.itemId, logItem.quantity + 1); }} 
+                                                                            className="px-2 py-1 text-gray-500 hover:bg-gray-100"
+                                                                            disabled={isLoading}
+                                                                          >+</button>
+                                                                      </div>
+                                                                      {/* Coefficient input */}
+                                                                      <div className="flex items-center gap-1">
+                                                                        <span className="text-gray-400 text-xs">×</span>
+                                                                        <input
+                                                                          type="text"
+                                                                          inputMode="decimal"
+                                                                          pattern="[0-9]*[,.]?[0-9]*"
+                                                                          value={getCoefficientInputValue(day.id, logItem.itemId, logItem.coefficient ?? 1)}
+                                                                          onChange={(e) => { e.stopPropagation(); handleCoefficientChange(day.id, logItem.itemId, e.target.value); }}
+                                                                          onClick={(e) => e.stopPropagation()}
+                                                                          className="w-14 px-1.5 py-1 text-center text-xs font-medium border border-gray-200 rounded bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
+                                                                          placeholder="1,0"
+                                                                        />
+                                                                      </div>
+                                                                    </>
                                                                 ) : (
-                                                                    <span className="text-gray-400">x{logItem.quantity}</span>
+                                                                    <>
+                                                                      <span className="text-gray-400 text-xs">x{logItem.quantity}</span>
+                                                                      {(logItem.coefficient && logItem.coefficient !== 1) && (
+                                                                        <span className="text-gray-400 text-xs">×{logItem.coefficient}</span>
+                                                                      )}
+                                                                    </>
                                                                 )}
                                                             <span className="font-medium text-gray-900 w-16 text-right">
-                                                                {service ? Math.round(service.price * (service.coefficient ?? 1) * logItem.quantity) : 0} ₽
+                                                                {itemTotal} ₽
                                                             </span>
                                                               </div>
                                                           </div>
@@ -662,7 +754,7 @@ const AdminView: React.FC<AdminViewProps> = ({
       {/* --- PRICES TAB --- */}
       {activeTab === 'prices' && (
         <div className="space-y-4">
-           <button onClick={() => setEditingPrice({ name: '', price: undefined, category: '', coefficient: 1 })} className="w-full py-3 bg-brand-600 text-white rounded-xl font-semibold flex items-center justify-center gap-2 shadow-lg shadow-brand-500/30">
+           <button onClick={() => setEditingPrice({ name: '', price: undefined, category: '' })} className="w-full py-3 bg-brand-600 text-white rounded-xl font-semibold flex items-center justify-center gap-2 shadow-lg shadow-brand-500/30">
             <Plus className="w-5 h-5" /> Добавить услугу
           </button>
           <div className="space-y-2">
@@ -673,10 +765,7 @@ const AdminView: React.FC<AdminViewProps> = ({
                         <div className="font-medium text-gray-900">{item.name}</div>
                     </div>
                     <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <div className="font-bold text-gray-700">{item.price} ₽</div>
-                          <div className="text-xs text-gray-400">×{item.coefficient ?? 1}</div>
-                        </div>
+                        <div className="font-bold text-gray-700">{item.price} ₽</div>
                         <button onClick={() => setEditingPrice(item)} className="p-2 bg-gray-50 text-gray-600 rounded-lg"><Edit2 className="w-4 h-4" /></button>
                         <button onClick={() => handleDeletePrice(item.id)} className="p-2 bg-red-50 text-red-500 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                     </div>
@@ -762,19 +851,7 @@ const AdminView: React.FC<AdminViewProps> = ({
                 <input value={editingPrice.name} onChange={e => setEditingPrice({...editingPrice, name: e.target.value})} className="w-full p-2 border border-gray-300 rounded-lg" placeholder="Название" />
                 <input list="categories" value={editingPrice.category} onChange={e => setEditingPrice({...editingPrice, category: e.target.value})} className="w-full p-2 border border-gray-300 rounded-lg" placeholder="Категория" />
                 <datalist id="categories">{existingCategories.map(cat => <option key={cat} value={cat} />)}</datalist>
-                <input type="number" value={editingPrice.price === undefined || editingPrice.price === 0 ? '' : editingPrice.price} onChange={e => setEditingPrice({...editingPrice, price: Number(e.target.value)})} className="w-full p-3 border border-gray-300 rounded-xl text-xl font-bold" placeholder="0" />
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  value={editingPrice.coefficient === undefined || editingPrice.coefficient === 1 ? '' : editingPrice.coefficient}
-                  onChange={e => setEditingPrice({
-                    ...editingPrice,
-                    coefficient: e.target.value === '' ? undefined : Number(e.target.value)
-                  })}
-                  className="w-full p-2 border border-gray-300 rounded-lg"
-                  placeholder="Коэффициент (по умолчанию 1)"
-                />
+                <input type="number" value={editingPrice.price === undefined || editingPrice.price === 0 ? '' : editingPrice.price} onChange={e => setEditingPrice({...editingPrice, price: Number(e.target.value)})} className="w-full p-3 border border-gray-300 rounded-xl text-xl font-bold" placeholder="0 ₽" />
             </div>
             <div className="flex gap-3 mt-6">
               <button onClick={() => setEditingPrice(null)} className="flex-1 py-2 text-gray-500" disabled={isLoading}>Отмена</button>
