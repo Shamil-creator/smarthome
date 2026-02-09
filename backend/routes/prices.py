@@ -34,7 +34,6 @@ def create_price():
     category = data.get('category', '').strip() if data.get('category') else ''
     name = data.get('name', '').strip() if data.get('name') else ''
     price = data.get('price', 0)
-    coefficient = data.get('coefficient', 1.0)
     
     if not category or not name:
         return jsonify({'error': 'category and name are required'}), 400
@@ -46,16 +45,8 @@ def create_price():
             return jsonify({'error': 'Price cannot be negative'}), 400
     except (ValueError, TypeError):
         return jsonify({'error': 'Price must be a valid integer'}), 400
-
-    # Validate coefficient is a positive number
-    try:
-        coefficient = float(coefficient)
-        if coefficient <= 0:
-            return jsonify({'error': 'Coefficient must be greater than 0'}), 400
-    except (ValueError, TypeError):
-        return jsonify({'error': 'Coefficient must be a valid number'}), 400
     
-    price_item = PriceItem(category=category, name=name, price=price, coefficient=coefficient)
+    price_item = PriceItem(category=category, name=name, price=price)
     db.session.add(price_item)
     db.session.commit()
     
@@ -94,15 +85,6 @@ def update_price(price_id):
             price_item.price = price
         except (ValueError, TypeError):
             return jsonify({'error': 'Price must be a valid integer'}), 400
-
-    if 'coefficient' in data:
-        try:
-            coefficient = float(data['coefficient'])
-            if coefficient <= 0:
-                return jsonify({'error': 'Coefficient must be greater than 0'}), 400
-            price_item.coefficient = coefficient
-        except (ValueError, TypeError):
-            return jsonify({'error': 'Coefficient must be a valid number'}), 400
     
     db.session.commit()
     return jsonify(price_item.to_dict())

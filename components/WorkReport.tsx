@@ -194,7 +194,7 @@ const WorkReport: React.FC<WorkReportProps> = ({
   const totalEarnings = Math.round(log.reduce((sum, item) => {
     const priceItem = priceList.find(p => p.id === item.itemId);
     const price = priceItem?.price || 0;
-    const coefficient = priceItem?.coefficient ?? 1;
+    const coefficient = item.coefficient ?? 1;
     return sum + (price * coefficient * item.quantity);
   }, 0));
 

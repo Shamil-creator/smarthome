@@ -53,7 +53,11 @@ def validate_and_parse_item_ids(work_log):
 
 
 def calculate_earnings(work_log):
-    """Calculate total earnings from work log items using single query"""
+    """Calculate total earnings from work log items using single query
+    
+    Coefficient is now stored per work log item (set by admin during approval),
+    not in PriceItem.
+    """
     if not work_log:
         return 0
     
@@ -65,9 +69,9 @@ def calculate_earnings(work_log):
     if not item_ids:
         return 0
     
-    # Fetch all prices in one query
+    # Fetch all prices in one query (only price, coefficient is in work_log)
     prices = {
-        p.id: {'price': p.price, 'coefficient': p.coefficient}
+        p.id: p.price
         for p in PriceItem.query.filter(PriceItem.id.in_(item_ids)).all()
     }
     
@@ -77,9 +81,17 @@ def calculate_earnings(work_log):
         item_id = item.get('itemId')
         if isinstance(item_id, str):
             item_id = int(item_id)
-        price_data = prices.get(item_id, {'price': 0, 'coefficient': 1.0})
-        price = price_data['price']
-        coefficient = price_data['coefficient']
+        price = prices.get(item_id, 0)
+        
+        # Get coefficient from work log item (default 1.0)
+        coefficient = item.get('coefficient', 1.0)
+        try:
+            coefficient = float(coefficient)
+            if coefficient <= 0:
+                coefficient = 1.0
+        except (ValueError, TypeError):
+            coefficient = 1.0
+        
         quantity = item.get('quantity', 1)
         # Validate quantity
         if not isinstance(quantity, int) or quantity < 1:
@@ -90,7 +102,10 @@ def calculate_earnings(work_log):
 
 
 def update_work_log(scheduled_day, work_log):
-    """Update work log items for a scheduled day and recalculate earnings"""
+    """Update work log items for a scheduled day and recalculate earnings
+    
+    Each work log item can have a coefficient (default 1.0), set by admin during approval.
+    """
     # Validate work log items first
     item_ids = validate_and_parse_item_ids(work_log)
     if item_ids is None:
@@ -107,10 +122,21 @@ def update_work_log(scheduled_day, work_log):
         quantity = item.get('quantity', 1)
         if not isinstance(quantity, int) or quantity < 1:
             quantity = 1
+        
+        # Get coefficient from item (default 1.0, validated)
+        coefficient = item.get('coefficient', 1.0)
+        try:
+            coefficient = float(coefficient)
+            if coefficient <= 0:
+                coefficient = 1.0
+        except (ValueError, TypeError):
+            coefficient = 1.0
+        
         work_item = WorkLogItem(
             scheduled_day_id=scheduled_day.id,
             price_item_id=item_id,
-            quantity=quantity
+            quantity=quantity,
+            coefficient=coefficient
         )
         db.session.add(work_item)
     

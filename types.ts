@@ -11,12 +11,12 @@ export interface PriceItem {
   category: string;
   name: string;
   price: number;
-  coefficient: number;
 }
 
 export interface WorkLogItem {
   itemId: string;
   quantity: number;
+  coefficient?: number;
 }
 
 export interface ClientObject {
@@ -71,7 +71,7 @@ export const statusToCompleted = (status: ReportStatus): boolean => {
 export const adaptScheduledDay = (day: Partial<ScheduledDay>): ScheduledDay => {
   const hasStatus = day.status !== undefined;
   const hasCompleted = day.completed !== undefined;
-  
+
   return {
     id: day.id, // Preserve database ID for API calls
     userId: day.userId ?? 0,
