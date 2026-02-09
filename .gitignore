@@ -53,3 +53,6 @@ coverage/
 .pytest_cache/
 test-results/
 playwright-report/
+
+# Agent working file
+AG_WORK.md

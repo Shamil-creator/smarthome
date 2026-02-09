@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { PriceItem, WorkLogItem, ClientObject, User, ScheduledDay, ReportStatus } from '../types';
 import { scheduleApi } from '../services/api';
-import { Plus, Minus, Calculator, Loader2, CheckCircle, Save, Clock, Banknote } from 'lucide-react';
+import { Plus, Minus, Calculator, Loader2, CheckCircle, Save, Clock, Banknote, ChevronDown, ClipboardList } from 'lucide-react';
 
 interface WorkReportProps {
   objects: ClientObject[];
@@ -14,23 +14,29 @@ interface WorkReportProps {
   onPricesUpdate?: () => Promise<void>;
 }
 
-const WorkReport: React.FC<WorkReportProps> = ({ 
-  objects, 
-  priceList, 
-  currentUser, 
+const WorkReport: React.FC<WorkReportProps> = ({
+  objects,
+  priceList,
+  currentUser,
   schedule,
   onWorkComplete,
   onUpdateScheduleItem,
-  onObjectsUpdate, 
-  onPricesUpdate 
+  onObjectsUpdate,
+  onPricesUpdate
 }) => {
   const [selectedObject, setSelectedObject] = useState<string>('');
   const [log, setLog] = useState<WorkLogItem[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [actionType, setActionType] = useState<'save_draft' | 'submit' | 'confirm_payment' | null>(null);
+  const [openCategory, setOpenCategory] = useState<string | null>(null);
+
+  // Track initialization and last local edit time to prevent polling from overwriting active edits
+  const isInitializedRef = useRef(false);
+  const lastLocalEditTimeRef = useRef<number>(0);
+  const lastServerDataHashRef = useRef<string>('');
 
   const todayStr = new Date().toISOString().split('T')[0];
-  
+
   // Find existing report for today
   const existingDay = schedule.find(s => s.userId === currentUser.id && s.date === todayStr);
 
@@ -40,28 +46,112 @@ const WorkReport: React.FC<WorkReportProps> = ({
     if (existingDay?.completed) return 'completed';
     return 'draft';
   };
-  
+
   const status = getStatus();
   const isEditable = status === 'draft' || status === 'pending_approval';
 
-  // Initialize state based on existing data
+  // Normalize workLog for comparison (sort by itemId, filter zeros)
+  const normalizeWorkLog = (workLog: WorkLogItem[] | undefined): string => {
+    if (!workLog || workLog.length === 0) return '';
+    const normalized = workLog
+      .filter(item => item.quantity > 0)
+      .map(item => ({
+        itemId: String(item.itemId),
+        quantity: item.quantity,
+        coefficient: item.coefficient ?? 1
+      }))
+      .sort((a, b) => a.itemId.localeCompare(b.itemId));
+    return JSON.stringify(normalized);
+  };
+
+  // Initialize state based on existing data with smart updates
   useEffect(() => {
-    if (existingDay && existingDay.objectId) {
-      setSelectedObject(existingDay.objectId);
+    if (!existingDay) {
+      // No existing day - initialize object selector if needed
+      if (objects.length > 0 && !selectedObject && !isInitializedRef.current) {
+        setSelectedObject(objects[0].id);
+        isInitializedRef.current = true;
+      }
+      return;
+    }
+
+    // First initialization
+    if (!isInitializedRef.current) {
+      if (existingDay.objectId) {
+        setSelectedObject(existingDay.objectId);
+      } else if (objects.length > 0 && !selectedObject) {
+        setSelectedObject(objects[0].id);
+      }
       if (existingDay.workLog) {
         setLog(existingDay.workLog);
+        lastServerDataHashRef.current = normalizeWorkLog(existingDay.workLog);
       }
-    } else if (objects.length > 0 && !selectedObject) {
-      setSelectedObject(objects[0].id);
+      isInitializedRef.current = true;
+      return;
     }
-  }, [existingDay, objects]);
+
+    // After initialization: smart update from polling
+    // Only update if:
+    // 1. Server data actually changed (different hash)
+    // 2. User hasn't edited in the last 2 seconds (to avoid overwriting active edits)
+    const serverHash = normalizeWorkLog(existingDay.workLog);
+    const timeSinceLastEdit = Date.now() - lastLocalEditTimeRef.current;
+    const MIN_EDIT_COOLDOWN = 2000; // 2 seconds
+
+    if (serverHash !== lastServerDataHashRef.current) {
+      // Server data changed
+      if (timeSinceLastEdit > MIN_EDIT_COOLDOWN) {
+        // Safe to update - user hasn't edited recently
+        if (existingDay.workLog) {
+          setLog(existingDay.workLog);
+          lastServerDataHashRef.current = serverHash;
+        }
+      }
+      // If user edited recently, keep local changes (they'll be saved soon)
+    }
+
+    // Always update objectId if it changed on server (admin might have changed it)
+    if (existingDay.objectId && existingDay.objectId !== selectedObject) {
+      setSelectedObject(existingDay.objectId);
+    }
+  }, [existingDay, objects, selectedObject]);
 
   const categories = useMemo(() => {
     return Array.from(new Set(priceList.map(p => p.category)));
   }, [priceList]);
 
+  // Count selected items (qty > 0) per category
+  const getSelectedCountForCategory = (cat: string) => {
+    return priceList
+      .filter(p => p.category === cat)
+      .filter(p => log.find(item => item.itemId === p.id && item.quantity > 0))
+      .length;
+  };
+
+  // Get all selected items with their details for the summary
+  const selectedItems = useMemo(() => {
+    return log
+      .filter(item => item.quantity > 0)
+      .map(item => {
+        const priceItem = priceList.find(p => p.id === item.itemId);
+        return priceItem ? { ...priceItem, quantity: item.quantity } : null;
+      })
+      .filter(Boolean) as (PriceItem & { quantity: number })[];
+  }, [log, priceList]);
+
+  // Set default open category on mount (first category or first with selected items)
+  useEffect(() => {
+    if (categories.length > 0 && openCategory === null) {
+      // Prefer first category with selected items, otherwise first category
+      const catWithSelected = categories.find(cat => getSelectedCountForCategory(cat) > 0);
+      setOpenCategory(catWithSelected || categories[0]);
+    }
+  }, [categories]);
+
   const setQuantity = (id: string, quantity: number) => {
     if (!isEditable) return;
+    // Track last edit time to prevent polling from overwriting active edits
+    lastLocalEditTimeRef.current = Date.now();
     setLog(prev => {
       if (quantity <= 0) return prev.filter(item => item.itemId !== id);
       const existing = prev.find(item => item.itemId === id);
@@ -112,10 +202,10 @@ const WorkReport: React.FC<WorkReportProps> = ({
   const handleAction = async (action: 'save_draft' | 'submit' | 'confirm_payment') => {
     if (log.length === 0 && action !== 'confirm_payment') return;
     if (!selectedObject && action !== 'confirm_payment') return;
-    
+
     setIsSaving(true);
     setActionType(action);
-    
+
     try {
       if (action === 'confirm_payment') {
         // Use dedicated confirm payment endpoint
@@ -127,6 +217,11 @@ const WorkReport: React.FC<WorkReportProps> = ({
           onUpdateScheduleItem(updated);
         } else {
           await onWorkComplete();
+        }
+        // Update local state from server response
+        if (updated?.workLog) {
+          setLog(updated.workLog);
+          lastServerDataHashRef.current = normalizeWorkLog(updated.workLog);
         }
         alert('Оплата подтверждена!');
       } else {
@@ -142,13 +237,21 @@ const WorkReport: React.FC<WorkReportProps> = ({
           status: newStatus,
           completed: completed,
         });
-        
+
         if (onUpdateScheduleItem) {
           onUpdateScheduleItem(updated);
         } else {
           await onWorkComplete();
         }
-        
+
+        // Update local state from server response (ensures sync with server)
+        if (updated?.workLog) {
+          setLog(updated.workLog);
+          lastServerDataHashRef.current = normalizeWorkLog(updated.workLog);
+        }
+        // Reset edit time to allow polling updates
+        lastLocalEditTimeRef.current = 0;
+
         if (action === 'submit') {
           alert('Отчет отправлен на проверку!');
         } else {
@@ -166,7 +269,7 @@ const WorkReport: React.FC<WorkReportProps> = ({
 
   // Status Banner
   const renderStatusBanner = () => {
-    switch(status) {
+    switch (status) {
       case 'pending_approval':
         return (
           <div className="bg-yellow-100 text-yellow-800 p-4 rounded-xl mb-4 flex gap-3 text-sm border border-yellow-200">
@@ -206,21 +309,20 @@ const WorkReport: React.FC<WorkReportProps> = ({
         <Calculator className="w-6 h-6 text-brand-500" />
         Отчет о работе
       </h1>
-      
+
       {renderStatusBanner()}
 
       {/* Object Selector (Locked if not draft/pending) */}
       <div className="mb-6">
         <label className="block text-sm font-medium text-gray-500 mb-2">Объект</label>
-        <select 
+        <select
           value={selectedObject}
           onChange={(e) => setSelectedObject(e.target.value)}
           disabled={!isEditable}
-          className={`w-full p-3 border rounded-xl font-medium text-gray-800 outline-none ${
-            !isEditable 
-              ? 'bg-gray-100 border-gray-200' 
+          className={`w-full p-3 border rounded-xl font-medium text-gray-800 outline-none ${!isEditable
+              ? 'bg-gray-100 border-gray-200'
               : 'bg-white border-gray-200 focus:ring-2 focus:ring-brand-500'
-          }`}
+            }`}
         >
           {objects.map(obj => (
             <option key={obj.id} value={obj.id}>{obj.name}</option>
@@ -228,64 +330,121 @@ const WorkReport: React.FC<WorkReportProps> = ({
         </select>
       </div>
 
-      {/* Price List */}
-      <div className="space-y-6">
-        {categories.map(cat => (
-          <div key={cat}>
-            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3 ml-1">{cat}</h3>
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden divide-y divide-gray-100">
-              {priceList.filter(p => p.category === cat).map(item => {
-                const qty = getQuantity(item.id);
-                // If not editable, only show items with qty > 0
-                if (!isEditable && qty === 0) return null;
-
-                return (
-                  <div key={item.id} className="p-4 flex items-center justify-between">
-                    <div className="flex-1 pr-4">
-                      <div className="font-medium text-gray-900">{item.name}</div>
-                      <div className="text-sm text-gray-500">
-                        {item.price} ₽ × {item.coefficient ?? 1}
-                      </div>
-                    </div>
-                    {isEditable ? (
-                      <div className="flex items-center bg-gray-50 rounded-lg p-1">
-                        <button 
-                          onClick={() => updateQuantity(item.id, -1)}
-                          className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors ${
-                            qty > 0 ? 'bg-white shadow-sm text-brand-600' : 'text-gray-300'
-                          }`}
-                          disabled={qty === 0}
-                        >
-                          <Minus className="w-4 h-4" />
-                        </button>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                          value={qty === 0 ? '' : String(qty)}
-                          onChange={(e) => handleQuantityInput(item.id, e.target.value)}
-                          placeholder="0"
-                          className="w-12 h-8 mx-1 text-center font-bold text-gray-900 bg-white rounded-md border border-gray-200 focus:ring-2 focus:ring-brand-500 outline-none"
-                          aria-label={`Количество для ${item.name}`}
-                        />
-                        <button 
-                          onClick={() => updateQuantity(item.id, 1)}
-                          className="w-8 h-8 flex items-center justify-center rounded-md bg-white shadow-sm text-brand-600 active:bg-gray-100"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="font-bold text-gray-900 px-3">
-                        x{qty}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+      {/* Selected Items Summary */}
+      {selectedItems.length > 0 && (
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <ClipboardList className="w-5 h-5 text-brand-500" />
+            <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wider">
+              Выбрано ({selectedItems.length})
+            </h2>
           </div>
-        ))}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden divide-y divide-gray-100">
+            {selectedItems.map(item => (
+              <div key={item.id} className="p-3 flex items-center justify-between">
+                <div className="flex-1 pr-3">
+                  <div className="font-medium text-gray-900 text-sm">{item.name}</div>
+                  <div className="text-xs text-gray-400">{item.category}</div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-semibold text-gray-700">x{item.quantity}</span>
+                  <span className="text-sm font-bold text-brand-600">{(item.price * item.quantity).toLocaleString()} ₽</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Price List with Accordion */}
+      <div className="space-y-3">
+        {categories.map(cat => {
+          const isOpen = openCategory === cat;
+          const selectedCount = getSelectedCountForCategory(cat);
+          const categoryItems = priceList.filter(p => p.category === cat);
+
+          return (
+            <div key={cat} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              {/* Accordion Header */}
+              <button
+                type="button"
+                onClick={() => setOpenCategory(isOpen ? null : cat)}
+                aria-expanded={isOpen}
+                aria-controls={`category-panel-${cat}`}
+                className="w-full p-4 flex items-center justify-between text-left transition-colors hover:bg-gray-50 group"
+              >
+                <div className="flex items-center gap-3">
+                  <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">{cat}</h3>
+                  {selectedCount > 0 && (
+                    <span className="px-2 py-0.5 bg-brand-100 text-brand-700 text-xs font-bold rounded-full">
+                      {selectedCount}
+                    </span>
+                  )}
+                </div>
+                <ChevronDown
+                  className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''
+                    }`}
+                />
+              </button>
+
+              {/* Accordion Panel */}
+              <div
+                id={`category-panel-${cat}`}
+                className={`transition-all duration-200 ease-in-out overflow-hidden ${isOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
+                  }`}
+              >
+                <div className="divide-y divide-gray-100 border-t border-gray-100">
+                  {categoryItems.map(item => {
+                    const qty = getQuantity(item.id);
+                    // If not editable, only show items with qty > 0
+                    if (!isEditable && qty === 0) return null;
+
+                    return (
+                      <div key={item.id} className="p-4 flex items-center justify-between">
+                        <div className="flex-1 pr-4">
+                          <div className="font-medium text-gray-900">{item.name}</div>
+                          <div className="text-sm text-gray-500">{item.price} ₽</div>
+                        </div>
+                        {isEditable ? (
+                          <div className="flex items-center bg-gray-50 rounded-lg p-1">
+                            <button
+                              onClick={() => updateQuantity(item.id, -1)}
+                              className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors ${qty > 0 ? 'bg-white shadow-sm text-brand-600' : 'text-gray-300'
+                                }`}
+                              disabled={qty === 0}
+                            >
+                              <Minus className="w-4 h-4" />
+                            </button>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={qty === 0 ? '' : String(qty)}
+                              onChange={(e) => handleQuantityInput(item.id, e.target.value)}
+                              placeholder="0"
+                              className="w-12 h-8 mx-1 text-center font-bold text-gray-900 bg-white rounded-md border border-gray-200 focus:ring-2 focus:ring-brand-500 outline-none"
+                              aria-label={`Количество для ${item.name}`}
+                            />
+                            <button
+                              onClick={() => updateQuantity(item.id, 1)}
+                              className="w-8 h-8 flex items-center justify-center rounded-md bg-white shadow-sm text-brand-600 active:bg-gray-100"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="font-bold text-gray-900 px-3">
+                            x{qty}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Sticky Bottom Bar */}
@@ -296,7 +455,7 @@ const WorkReport: React.FC<WorkReportProps> = ({
               <div className="text-gray-400 text-xs uppercase font-bold">Итого</div>
               <div className="text-xl font-bold">{totalEarnings.toLocaleString()} ₽</div>
             </div>
-            
+
             <div className="flex gap-2">
               {isEditable ? (
                 <>
@@ -314,11 +473,10 @@ const WorkReport: React.FC<WorkReportProps> = ({
                   <button
                     onClick={() => handleAction('submit')}
                     disabled={log.length === 0 || isSaving}
-                    className={`px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-all ${
-                      log.length > 0 && !isSaving
-                        ? 'bg-brand-500 hover:bg-brand-400 text-white' 
+                    className={`px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-all ${log.length > 0 && !isSaving
+                        ? 'bg-brand-500 hover:bg-brand-400 text-white'
                         : 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                    }`}
+                      }`}
                   >
                     {isSaving && actionType === 'submit' ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
