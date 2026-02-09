@@ -57,8 +57,7 @@ const WorkReport: React.FC<WorkReportProps> = ({
       .filter(item => item.quantity > 0)
       .map(item => ({
         itemId: String(item.itemId),
-        quantity: item.quantity,
-        coefficient: item.coefficient ?? 1
+        quantity: item.quantity
       }))
       .sort((a, b) => a.itemId.localeCompare(b.itemId));
     return JSON.stringify(normalized);
@@ -320,8 +319,8 @@ const WorkReport: React.FC<WorkReportProps> = ({
           onChange={(e) => setSelectedObject(e.target.value)}
           disabled={!isEditable}
           className={`w-full p-3 border rounded-xl font-medium text-gray-800 outline-none ${!isEditable
-              ? 'bg-gray-100 border-gray-200'
-              : 'bg-white border-gray-200 focus:ring-2 focus:ring-brand-500'
+            ? 'bg-gray-100 border-gray-200'
+            : 'bg-white border-gray-200 focus:ring-2 focus:ring-brand-500'
             }`}
         >
           {objects.map(obj => (
@@ -474,8 +473,8 @@ const WorkReport: React.FC<WorkReportProps> = ({
                     onClick={() => handleAction('submit')}
                     disabled={log.length === 0 || isSaving}
                     className={`px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-all ${log.length > 0 && !isSaving
-                        ? 'bg-brand-500 hover:bg-brand-400 text-white'
-                        : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                      ? 'bg-brand-500 hover:bg-brand-400 text-white'
+                      : 'bg-gray-700 text-gray-500 cursor-not-allowed'
                       }`}
                   >
                     {isSaving && actionType === 'submit' ? (
