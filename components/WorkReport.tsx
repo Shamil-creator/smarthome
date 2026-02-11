@@ -451,19 +451,16 @@ const WorkReport: React.FC<WorkReportProps> = ({
             <Calendar className="w-4 h-4" /> Выберите дату
           </div>
 
-          {/* Re-implementing the button as a prominent link/button in the header */}
-          <div className="relative">
-            <button
-              onClick={() => dateInputRef.current?.showPicker()}
-              className="px-3 py-1.5 bg-brand-50 text-brand-600 text-xs font-bold rounded-lg flex items-center gap-2 hover:bg-brand-100 transition-all active:scale-95"
-            >
+          {/* Robust date picker trigger using a hidden input overlay */}
+          <div className="relative group">
+            <div className="px-3 py-1.5 bg-brand-50 text-brand-600 text-xs font-bold rounded-lg flex items-center gap-2 group-hover:bg-brand-100 transition-all group-active:scale-95">
               <RefreshCw className="w-3.5 h-3.5" />
               Календарь
-            </button>
+            </div>
             <input
               ref={dateInputRef}
               type="date"
-              className="absolute inset-0 opacity-0 cursor-pointer pointer-events-none"
+              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
               value={selectedDate}
               onChange={(e) => {
                 if (e.target.value) setSelectedDate(e.target.value);
