@@ -3,7 +3,7 @@ import { HashRouter } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import BottomNav from './components/BottomNav';
 import { ViewState, ScheduledDay, ClientObject, PriceItem, User, DocItem, adaptScheduledDay } from './types';
-import { usersApi, objectsApi, pricesApi, scheduleApi, docsApi, getTelegramUserName, checkApiHealth, clearApiCache } from './services/api';
+import { usersApi, objectsApi, pricesApi, scheduleApi, docsApi, getTelegramUserName, checkApiHealth, clearApiCache, getServerTime } from './services/api';
 import { Loader2 } from 'lucide-react';
 
 // Lazy load heavy components for faster initial load
@@ -21,11 +21,11 @@ const LoadingFallback: React.FC = () => (
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
-  
+
   // Loading & Error states
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Track which data has been loaded (for lazy loading)
   const [dataLoaded, setDataLoaded] = useState({
     schedule: false,
@@ -34,7 +34,7 @@ const App: React.FC = () => {
     docs: false,
     users: false,
   });
-  
+
   // App State
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -42,6 +42,7 @@ const App: React.FC = () => {
   const [objects, setObjects] = useState<ClientObject[]>([]);
   const [generalDocs, setGeneralDocs] = useState<DocItem[]>([]);
   const [priceList, setPriceList] = useState<PriceItem[]>([]);
+  const [serverDate, setServerDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
   // Load schedule data (critical - needed for Dashboard)
   const loadSchedule = useCallback(async () => {
@@ -108,36 +109,41 @@ const App: React.FC = () => {
     const initApp = async () => {
       setIsLoading(true);
       setError(null);
-      
-      // Check API health with timeout (non-blocking)
-      checkApiHealth().catch(() => {
-        console.warn('Backend health check failed');
-      });
-      
+
+      // Check API health and get server time (blocking for time)
+      checkApiHealth().catch(() => console.warn('Backend health check failed'));
+
+      try {
+        const timeData = await getServerTime();
+        setServerDate(timeData.date);
+      } catch (err) {
+        console.warn('Failed to fetch server time, falling back to local date');
+      }
+
       // Check Telegram WebApp data
       const tg = (window as any).Telegram?.WebApp;
       // #region agent log
-      fetch('/api/debug/log',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'G',location:'App.tsx:initApp',message:'telegram_webapp_state',data:{hasTelegram:!!tg,hasInitData:!!tg?.initData,hasInitDataUnsafeUser:!!tg?.initDataUnsafe?.user,initDataLen:tg?.initData?.length || 0},timestamp:Date.now()})}).catch(()=>{});
+      fetch('/api/debug/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'pre-fix', hypothesisId: 'G', location: 'App.tsx:initApp', message: 'telegram_webapp_state', data: { hasTelegram: !!tg, hasInitData: !!tg?.initData, hasInitDataUnsafeUser: !!tg?.initDataUnsafe?.user, initDataLen: tg?.initData?.length || 0 }, timestamp: Date.now() }) }).catch(() => { });
       // #endregion
       if (tg) {
         tg.ready();
         tg.expand();
-        
+
         const tgUser = tg.initDataUnsafe?.user;
         if (tgUser && tgUser.id) {
           // Try to get existing user
           let user = await usersApi.getCurrentUser();
           // #region agent log
-          fetch('/api/debug/log',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'G',location:'App.tsx:initApp',message:'get_current_user_result',data:{hasUser:!!user,userId:user?.id || null,telegramId:user?.telegramId || null},timestamp:Date.now()})}).catch(()=>{});
+          fetch('/api/debug/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'pre-fix', hypothesisId: 'G', location: 'App.tsx:initApp', message: 'get_current_user_result', data: { hasUser: !!user, userId: user?.id || null, telegramId: user?.telegramId || null }, timestamp: Date.now() }) }).catch(() => { });
           // #endregion
-          
+
           if (!user) {
             // Create new user if not exists
             try {
               const name = getTelegramUserName();
               user = await usersApi.createUser(tgUser.id, name);
               // #region agent log
-              fetch('/api/debug/log',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'G',location:'App.tsx:initApp',message:'create_user_success',data:{userId:user?.id || null,telegramId:user?.telegramId || null},timestamp:Date.now()})}).catch(()=>{});
+              fetch('/api/debug/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'pre-fix', hypothesisId: 'G', location: 'App.tsx:initApp', message: 'create_user_success', data: { userId: user?.id || null, telegramId: user?.telegramId || null }, timestamp: Date.now() }) }).catch(() => { });
               // #endregion
             } catch (err: any) {
               // User might already exist (race condition)
@@ -146,11 +152,11 @@ const App: React.FC = () => {
               }
             }
           }
-          
+
           if (user) {
             setCurrentUser(user);
             // #region agent log
-            fetch('/api/debug/log',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'G',location:'App.tsx:initApp',message:'set_current_user',data:{userId:user.id,telegramId:user.telegramId || null},timestamp:Date.now()})}).catch(()=>{});
+            fetch('/api/debug/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'pre-fix', hypothesisId: 'G', location: 'App.tsx:initApp', message: 'set_current_user', data: { userId: user.id, telegramId: user.telegramId || null }, timestamp: Date.now() }) }).catch(() => { });
             // #endregion
           }
         }
@@ -165,7 +171,7 @@ const App: React.FC = () => {
         };
         setCurrentUser(devUser);
       }
-      
+
       // Load only critical data - schedule (for dashboard)
       try {
         const scheduleData = await scheduleApi.getAll();
@@ -174,17 +180,17 @@ const App: React.FC = () => {
       } catch (err) {
         console.error('Error loading schedule:', err);
       }
-      
+
       setIsLoading(false);
     };
-    
+
     initApp();
   }, []);
 
   useEffect(() => {
     if (!isLoading && !currentUser) {
       // #region agent log
-      fetch('/api/debug/log',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'G',location:'App.tsx:auth_screen',message:'current_user_missing_after_init',data:{hasError:!!error},timestamp:Date.now()})}).catch(()=>{});
+      fetch('/api/debug/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'pre-fix', hypothesisId: 'G', location: 'App.tsx:auth_screen', message: 'current_user_missing_after_init', data: { hasError: !!error }, timestamp: Date.now() }) }).catch(() => { });
       // #endregion
     }
   }, [isLoading, currentUser, error]);
@@ -207,7 +213,7 @@ const App: React.FC = () => {
           break;
       }
     };
-    
+
     loadViewData();
   }, [currentView, loadObjects, loadPrices, loadDocs, loadUsers]);
 
@@ -262,11 +268,11 @@ const App: React.FC = () => {
   // Polls schedule data every 10 seconds to show status changes in real-time
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isPollingPausedRef = useRef(false);
-  
+
   const pollScheduleData = useCallback(async () => {
     // Skip polling if paused (tab hidden) or still loading initial data
     if (isPollingPausedRef.current || isLoading) return;
-    
+
     try {
       const scheduleData = await scheduleApi.getAll();
       setSchedule(scheduleData.map(adaptScheduledDay));
@@ -314,7 +320,7 @@ const App: React.FC = () => {
 
   // === Incremental Update Functions ===
   // These update the local state directly without full reload
-  
+
   // Update a single schedule item
   const updateScheduleItem = useCallback((updatedItem: ScheduledDay) => {
     const adapted = adaptScheduledDay(updatedItem);
@@ -336,7 +342,7 @@ const App: React.FC = () => {
 
   // Update an existing object in state
   const updateObject = useCallback((updatedObject: ClientObject) => {
-    setObjects(prev => prev.map(obj => 
+    setObjects(prev => prev.map(obj =>
       obj.id === updatedObject.id ? updatedObject : obj
     ));
   }, []);
@@ -353,7 +359,7 @@ const App: React.FC = () => {
 
   // Update an existing price item
   const updatePrice = useCallback((updatedPrice: PriceItem) => {
-    setPriceList(prev => prev.map(price => 
+    setPriceList(prev => prev.map(price =>
       price.id === updatedPrice.id ? updatedPrice : price
     ));
   }, []);
@@ -375,7 +381,7 @@ const App: React.FC = () => {
 
   // Filter schedule for the current logged-in user (memoized)
   const mySchedule = useMemo(() => {
-    return currentUser 
+    return currentUser
       ? schedule.filter(s => s.userId === currentUser.id)
       : [];
   }, [currentUser, schedule]);
@@ -403,7 +409,7 @@ const App: React.FC = () => {
           </div>
           <h2 className="text-xl font-bold text-gray-800 mb-2">Ошибка</h2>
           <p className="text-gray-500 mb-4">{error}</p>
-          <button 
+          <button
             onClick={() => window.location.reload()}
             className="px-6 py-2 bg-brand-600 text-white rounded-xl font-medium"
           >
@@ -418,7 +424,7 @@ const App: React.FC = () => {
   if (!currentUser) {
     // #region agent log
     const tgDebug = (window as any).Telegram?.WebApp;
-    fetch('/api/debug/log',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H',location:'App.tsx:render',message:'auth_required_screen_shown',data:{isLoading,hasError:!!error,hasTelegram:!!tgDebug,hasInitData:!!tgDebug?.initData,hasInitDataUnsafeUser:!!tgDebug?.initDataUnsafe?.user},timestamp:Date.now()})}).catch(()=>{});
+    fetch('/api/debug/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'pre-fix', hypothesisId: 'H', location: 'App.tsx:render', message: 'auth_required_screen_shown', data: { isLoading, hasError: !!error, hasTelegram: !!tgDebug, hasInitData: !!tgDebug?.initData, hasInitDataUnsafeUser: !!tgDebug?.initDataUnsafe?.user }, timestamp: Date.now() }) }).catch(() => { });
     // #endregion
     return (
       <div className="max-w-md mx-auto min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -436,45 +442,50 @@ const App: React.FC = () => {
   const renderView = () => {
     switch (currentView) {
       case 'dashboard':
-        return <Dashboard 
-          schedule={mySchedule} 
-          fullSchedule={schedule}
-          onNavigate={setCurrentView} 
-          currentUser={currentUser} 
-        />;
+        return (
+          <Dashboard
+            schedule={mySchedule}
+            fullSchedule={schedule}
+            onNavigate={setCurrentView}
+            currentUser={currentUser!}
+            todayStr={serverDate}
+          />
+        );
       case 'schedule':
         return (
           <Suspense fallback={<LoadingFallback />}>
-            <ScheduleView 
-              userId={currentUser.id}
-              fullSchedule={schedule} 
+            <ScheduleView
+              userId={currentUser!.id}
+              fullSchedule={schedule}
               onScheduleUpdate={refreshSchedule}
-              objects={objects} 
+              objects={objects}
+              todayStr={serverDate}
             />
           </Suspense>
         );
       case 'report':
         return (
           <Suspense fallback={<LoadingFallback />}>
-            <WorkReport 
-              objects={objects} 
+            <WorkReport
+              objects={objects}
               priceList={priceList}
-              currentUser={currentUser}
+              currentUser={currentUser!}
               schedule={mySchedule}
               onWorkComplete={refreshSchedule}
               onUpdateScheduleItem={updateScheduleItem}
               onObjectsUpdate={refreshObjects}
               onPricesUpdate={refreshPrices}
+              todayStr={serverDate}
             />
           </Suspense>
         );
       case 'docs':
         return (
           <Suspense fallback={<LoadingFallback />}>
-            <KnowledgeBase 
-              objects={objects} 
+            <KnowledgeBase
+              objects={objects}
               generalDocs={generalDocs}
-              isAdmin={currentUser.role === 'admin'}
+              isAdmin={currentUser!.role === 'admin'}
               onDocsUpdate={refreshGeneralDocs}
               onObjectsUpdate={refreshObjects}
             />
@@ -482,19 +493,19 @@ const App: React.FC = () => {
         );
       case 'admin':
         // Protected route
-        if (currentUser.role !== 'admin') {
-           setCurrentView('dashboard');
-           return <Dashboard schedule={mySchedule} fullSchedule={schedule} onNavigate={setCurrentView} currentUser={currentUser} />;
+        if (currentUser!.role !== 'admin') {
+          setCurrentView('dashboard');
+          return <Dashboard schedule={mySchedule} fullSchedule={schedule} onNavigate={setCurrentView} currentUser={currentUser!} todayStr={serverDate} />;
         }
         return (
           <Suspense fallback={<LoadingFallback />}>
-            <AdminView 
-              objects={objects} 
+            <AdminView
+              objects={objects}
               onObjectsUpdate={refreshObjects}
               onAddObject={addObject}
               onUpdateObject={updateObject}
               onRemoveObject={removeObject}
-              priceList={priceList} 
+              priceList={priceList}
               onPricesUpdate={refreshPrices}
               onAddPrice={addPrice}
               onUpdatePrice={updatePrice}
@@ -512,7 +523,7 @@ const App: React.FC = () => {
           </Suspense>
         );
       default:
-        return <Dashboard schedule={mySchedule} fullSchedule={schedule} onNavigate={setCurrentView} currentUser={currentUser} />;
+        return <Dashboard schedule={mySchedule} fullSchedule={schedule} onNavigate={setCurrentView} currentUser={currentUser!} todayStr={serverDate} />;
     }
   };
 
@@ -522,18 +533,18 @@ const App: React.FC = () => {
         <div className="h-full">
           {renderView()}
         </div>
-        
+
         {currentView !== 'admin' && (
           <BottomNav currentView={currentView} onNavigate={setCurrentView} />
         )}
-        
+
         {currentView === 'admin' && (
-           <button 
-              onClick={() => setCurrentView('dashboard')}
-              className="fixed bottom-6 right-6 bg-gray-800 text-white px-4 py-2 rounded-full shadow-lg text-sm font-semibold hover:bg-gray-700 transition-colors z-50"
-           >
-              Выйти из админки
-           </button>
+          <button
+            onClick={() => setCurrentView('dashboard')}
+            className="fixed bottom-6 right-6 bg-gray-800 text-white px-4 py-2 rounded-full shadow-lg text-sm font-semibold hover:bg-gray-700 transition-colors z-50"
+          >
+            Выйти из админки
+          </button>
         )}
       </div>
     </HashRouter>

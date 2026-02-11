@@ -12,6 +12,7 @@ interface WorkReportProps {
   onUpdateScheduleItem?: (item: ScheduledDay) => void;
   onObjectsUpdate?: () => Promise<void>;
   onPricesUpdate?: () => Promise<void>;
+  todayStr: string;
 }
 
 const WorkReport: React.FC<WorkReportProps> = ({
@@ -22,18 +23,19 @@ const WorkReport: React.FC<WorkReportProps> = ({
   onWorkComplete,
   onUpdateScheduleItem,
   onObjectsUpdate,
-  onPricesUpdate
+  onPricesUpdate,
+  todayStr
 }) => {
   const [selectedObject, setSelectedObject] = useState<string>('');
   const [log, setLog] = useState<WorkLogItem[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [actionType, setActionType] = useState<'save_draft' | 'submit' | 'confirm_payment' | null>(null);
   const [openCategory, setOpenCategory] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [lastSaved, setLastSaved] = useState<number>(0);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-  const [viewDate, setViewDate] = useState(new Date()); // For calendar navigation
+  const [viewDate, setViewDate] = useState(new Date(todayStr)); // For calendar navigation
 
   // Track initialization and last local edit time to prevent polling from overwriting active edits
   const isInitializedRef = useRef(false);
@@ -41,7 +43,7 @@ const WorkReport: React.FC<WorkReportProps> = ({
   const lastServerDataHashRef = useRef<string>('');
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  // todayStr is now provided as a prop
 
   // Helper to get YYYY-MM-DD in LOCAL time to avoid timezone shifts
   const formatDateLocal = (date: Date): string => {
@@ -55,7 +57,7 @@ const WorkReport: React.FC<WorkReportProps> = ({
   const last7Days = useMemo(() => {
     const dates = [];
     for (let i = 0; i < 14; i++) {
-      const d = new Date();
+      const d = new Date(todayStr);
       d.setDate(d.getDate() - i);
       dates.push(formatDateLocal(d));
     }

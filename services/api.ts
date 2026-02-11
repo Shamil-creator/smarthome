@@ -27,12 +27,12 @@ const cache = new Map<string, CacheEntry<any>>();
 function getCached<T>(key: string): T | null {
   const entry = cache.get(key);
   if (!entry) return null;
-  
+
   if (Date.now() > entry.expiresAt) {
     cache.delete(key);
     return null;
   }
-  
+
   return entry.data as T;
 }
 
@@ -117,7 +117,7 @@ async function apiRequest<T>(
       return cached;
     }
   }
-  
+
   // Get authentication data
   let initData = getTelegramInitData();
   const tg = getTelegramWebApp();
@@ -125,10 +125,10 @@ async function apiRequest<T>(
     initData = await waitForInitData();
   }
   // #region agent log
-  fetch('/api/debug/log',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'C',location:'services/api.ts:apiRequest',message:'auth_headers_state',data:{endpoint,method:options.method || 'GET',hasInitData:!!initData,hasTelegramId:!!getTelegramUserId()},timestamp:Date.now()})}).catch(()=>{});
+  fetch('/api/debug/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'pre-fix', hypothesisId: 'C', location: 'services/api.ts:apiRequest', message: 'auth_headers_state', data: { endpoint, method: options.method || 'GET', hasInitData: !!initData, hasTelegramId: !!getTelegramUserId() }, timestamp: Date.now() }) }).catch(() => { });
   // #endregion
   const telegramId = getTelegramUserId();
-  
+
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     // Prefer initData for secure authentication
@@ -164,12 +164,12 @@ async function apiRequest<T>(
     }
 
     const data = await response.json();
-    
+
     // Cache the result for GET requests
     if (cacheConfig && (!options.method || options.method === 'GET')) {
       setCache(cacheConfig.key, data, cacheConfig.ttl);
     }
-    
+
     return data;
   } catch (error: any) {
     clearTimeout(timeoutId);
@@ -483,4 +483,8 @@ export const checkApiHealth = async (): Promise<boolean> => {
   } catch {
     return false;
   }
+};
+
+export const getServerTime = async (): Promise<{ date: string; timestamp: number }> => {
+  return apiRequest<{ date: string; timestamp: number }>('/time');
 };

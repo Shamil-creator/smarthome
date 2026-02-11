@@ -8,31 +8,32 @@ interface ScheduleViewProps {
   fullSchedule: ScheduledDay[];
   onScheduleUpdate: () => Promise<void>;
   objects: ClientObject[];
+  todayStr: string;
 }
 
-const ScheduleView: React.FC<ScheduleViewProps> = ({ userId, fullSchedule, onScheduleUpdate, objects }) => {
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+const ScheduleView: React.FC<ScheduleViewProps> = ({ userId, fullSchedule, onScheduleUpdate, objects, todayStr }) => {
+  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [isAssigning, setIsAssigning] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   // Generate next 7 days - memoized
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
+    const d = new Date(todayStr);
     d.setDate(d.getDate() + i);
     return d.toISOString().split('T')[0];
-  }), []);
+  }), [todayStr]);
 
   // Filter schedule for THIS user only - memoized
   const mySchedule = useMemo(() => fullSchedule.filter(s => s.userId === userId), [fullSchedule, userId]);
   const currentDaySchedule = useMemo(() => mySchedule.find(s => s.date === selectedDate), [mySchedule, selectedDate]);
-  const assignedObject = useMemo(() => 
+  const assignedObject = useMemo(() =>
     currentDaySchedule ? objects.find(o => o.id === currentDaySchedule.objectId) : null,
     [currentDaySchedule, objects]
   );
 
   const handleAssign = async (objectId: string) => {
     setIsLoading(true);
-    
+
     try {
       await scheduleApi.createOrUpdate({
         userId,
@@ -63,16 +64,15 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ userId, fullSchedule, onSch
           const isSelected = selectedDate === date;
           // Check if user has work on this date
           const hasWork = mySchedule.some(s => s.date === date && s.objectId);
-          
+
           return (
             <button
               key={date}
               onClick={() => setSelectedDate(date)}
-              className={`flex-shrink-0 w-16 h-20 rounded-2xl flex flex-col items-center justify-center transition-all ${
-                isSelected 
-                  ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/40 scale-105' 
+              className={`flex-shrink-0 w-16 h-20 rounded-2xl flex flex-col items-center justify-center transition-all ${isSelected
+                  ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/40 scale-105'
                   : 'bg-white text-gray-500 border border-gray-100'
-              }`}
+                }`}
             >
               <span className="text-xs font-medium uppercase">{d.toLocaleDateString('ru-RU', { weekday: 'short' })}</span>
               <span className="text-xl font-bold mt-1">{d.getDate()}</span>
@@ -90,7 +90,7 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ userId, fullSchedule, onSch
 
         {assignedObject ? (
           <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm relative overflow-hidden">
-             <div className="absolute top-0 right-0 w-24 h-24 bg-brand-50 rounded-bl-full -mr-10 -mt-10 z-0"></div>
+            <div className="absolute top-0 right-0 w-24 h-24 bg-brand-50 rounded-bl-full -mr-10 -mt-10 z-0"></div>
             <div className="relative z-10">
               <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded uppercase tracking-wide">Назначено</span>
               <h3 className="text-xl font-bold text-gray-900 mt-2">{assignedObject.name}</h3>
@@ -102,8 +102,8 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ userId, fullSchedule, onSch
                 <Clock className="w-4 h-4 mr-2" />
                 09:00 - 18:00
               </div>
-              
-              <button 
+
+              <button
                 onClick={() => setIsAssigning(true)}
                 className="mt-4 text-brand-600 text-sm font-medium hover:underline"
               >

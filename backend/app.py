@@ -1,6 +1,7 @@
 import os
 import re
 import logging
+import datetime
 from flask import Flask, jsonify, request, send_from_directory, abort
 from flask_cors import CORS
 from flask_compress import Compress
@@ -159,6 +160,18 @@ def add_security_headers(response):
 @limiter.exempt  # Health check should not be rate limited
 def health_check():
     return jsonify({'status': 'ok'})
+
+
+@app.route('/api/time', methods=['GET'])
+@limiter.exempt
+def get_server_time():
+    """Return current server time (YYYY-MM-DD)"""
+    # Server is expected to be in Moscow time per user request
+    now = datetime.datetime.now()
+    return jsonify({
+        'date': now.strftime('%Y-%m-%d'),
+        'timestamp': int(now.timestamp() * 1000)
+    })
 
 
 # Temporary debug log endpoint for frontend instrumentation
