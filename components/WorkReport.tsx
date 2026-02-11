@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { PriceItem, WorkLogItem, ClientObject, User, ScheduledDay, ReportStatus } from '../types';
 import { scheduleApi } from '../services/api';
-import { Plus, Minus, Calculator, Loader2, CheckCircle, Save, Clock, Banknote, ChevronDown, ClipboardList } from 'lucide-react';
+import { Plus, Minus, Calculator, Loader2, CheckCircle, Save, Clock, Banknote, ChevronDown, ClipboardList, Calendar } from 'lucide-react';
 
 interface WorkReportProps {
   objects: ClientObject[];
@@ -29,6 +29,7 @@ const WorkReport: React.FC<WorkReportProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [actionType, setActionType] = useState<'save_draft' | 'submit' | 'confirm_payment' | null>(null);
   const [openCategory, setOpenCategory] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
   // Track initialization and last local edit time to prevent polling from overwriting active edits
   const isInitializedRef = useRef(false);
@@ -37,8 +38,19 @@ const WorkReport: React.FC<WorkReportProps> = ({
 
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // Find existing report for today
-  const existingDay = schedule.find(s => s.userId === currentUser.id && s.date === todayStr);
+  // Helper to get last 7 days
+  const last7Days = useMemo(() => {
+    const dates = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      dates.push(d.toISOString().split('T')[0]);
+    }
+    return dates;
+  }, []);
+
+  // Find existing report for selected date
+  const existingDay = schedule.find(s => s.userId === currentUser.id && s.date === selectedDate);
 
   // Get current status (support both old and new format)
   const getStatus = (): ReportStatus => {
@@ -63,57 +75,63 @@ const WorkReport: React.FC<WorkReportProps> = ({
     return JSON.stringify(normalized);
   };
 
+  // Reset initialization when date changes
+  useEffect(() => {
+    isInitializedRef.current = false;
+    lastLocalEditTimeRef.current = 0;
+  }, [selectedDate]);
+
   // Initialize state based on existing data with smart updates
   useEffect(() => {
     if (!existingDay) {
       // No existing day - initialize object selector if needed
-      if (objects.length > 0 && !selectedObject && !isInitializedRef.current) {
-        setSelectedObject(objects[0].id);
+      if (!isInitializedRef.current) {
+        if (objects.length > 0) {
+          setSelectedObject(objects[0].id);
+        }
+        setLog([]);
+        lastServerDataHashRef.current = '';
         isInitializedRef.current = true;
       }
       return;
     }
 
-    // First initialization
+    // First initialization for this date
     if (!isInitializedRef.current) {
       if (existingDay.objectId) {
         setSelectedObject(existingDay.objectId);
-      } else if (objects.length > 0 && !selectedObject) {
+      } else if (objects.length > 0) {
         setSelectedObject(objects[0].id);
       }
       if (existingDay.workLog) {
         setLog(existingDay.workLog);
         lastServerDataHashRef.current = normalizeWorkLog(existingDay.workLog);
+      } else {
+        setLog([]);
+        lastServerDataHashRef.current = '';
       }
       isInitializedRef.current = true;
       return;
     }
 
     // After initialization: smart update from polling
-    // Only update if:
-    // 1. Server data actually changed (different hash)
-    // 2. User hasn't edited in the last 2 seconds (to avoid overwriting active edits)
     const serverHash = normalizeWorkLog(existingDay.workLog);
     const timeSinceLastEdit = Date.now() - lastLocalEditTimeRef.current;
-    const MIN_EDIT_COOLDOWN = 2000; // 2 seconds
+    const MIN_EDIT_COOLDOWN = 2000;
 
     if (serverHash !== lastServerDataHashRef.current) {
-      // Server data changed
       if (timeSinceLastEdit > MIN_EDIT_COOLDOWN) {
-        // Safe to update - user hasn't edited recently
         if (existingDay.workLog) {
           setLog(existingDay.workLog);
           lastServerDataHashRef.current = serverHash;
         }
       }
-      // If user edited recently, keep local changes (they'll be saved soon)
     }
 
-    // Always update objectId if it changed on server (admin might have changed it)
-    if (existingDay.objectId && existingDay.objectId !== selectedObject) {
+    if (existingDay.objectId && existingDay.objectId !== selectedObject && timeSinceLastEdit > MIN_EDIT_COOLDOWN) {
       setSelectedObject(existingDay.objectId);
     }
-  }, [existingDay, objects, selectedObject]);
+  }, [existingDay, objects, selectedDate]);
 
   const categories = useMemo(() => {
     return Array.from(new Set(priceList.map(p => p.category)));
@@ -230,7 +248,7 @@ const WorkReport: React.FC<WorkReportProps> = ({
 
         const updated = await scheduleApi.completeWork({
           userId: currentUser.id,
-          date: todayStr,
+          date: selectedDate,
           objectId: selectedObject,
           workLog: log,
           status: newStatus,
@@ -310,6 +328,41 @@ const WorkReport: React.FC<WorkReportProps> = ({
       </h1>
 
       {renderStatusBanner()}
+
+      {/* Date Selector */}
+      <div className="mb-6">
+        <label className="block text-sm font-medium text-gray-500 mb-2 flex items-center gap-2">
+          <Calendar className="w-4 h-4" /> Выберите дату
+        </label>
+        <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
+          {last7Days.map(date => {
+            const isSelected = date === selectedDate;
+            const hasReport = schedule.some(s => s.userId === currentUser.id && s.date === date);
+            const d = new Date(date);
+            const dayName = date === todayStr ? 'Сегодня' : d.toLocaleDateString('ru-RU', { weekday: 'short' });
+            const dayNum = d.getDate();
+
+            return (
+              <button
+                key={date}
+                onClick={() => setSelectedDate(date)}
+                className={`flex-shrink-0 flex flex-col items-center justify-center w-16 h-20 rounded-2xl border transition-all ${isSelected
+                  ? 'bg-brand-500 border-brand-500 text-white shadow-lg shadow-brand-200'
+                  : 'bg-white border-gray-100 text-gray-600 hover:border-brand-200'
+                  }`}
+              >
+                <span className={`text-[10px] uppercase font-bold mb-1 ${isSelected ? 'text-brand-100' : 'text-gray-400'}`}>
+                  {dayName}
+                </span>
+                <span className="text-lg font-bold">{dayNum}</span>
+                {hasReport && (
+                  <div className={`w-1.5 h-1.5 rounded-full mt-1 ${isSelected ? 'bg-white' : 'bg-brand-500'}`} />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Object Selector (Locked if not draft/pending) */}
       <div className="mb-6">
