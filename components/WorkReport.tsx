@@ -43,13 +43,21 @@ const WorkReport: React.FC<WorkReportProps> = ({
 
   const todayStr = new Date().toISOString().split('T')[0];
 
+  // Helper to get YYYY-MM-DD in LOCAL time to avoid timezone shifts
+  const formatDateLocal = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Helper to get last 7 days
   const last7Days = useMemo(() => {
     const dates = [];
     for (let i = 0; i < 14; i++) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      dates.push(d.toISOString().split('T')[0]);
+      dates.push(formatDateLocal(d));
     }
     return dates;
   }, []);
@@ -425,7 +433,7 @@ const WorkReport: React.FC<WorkReportProps> = ({
             <div className="grid grid-cols-7 gap-1">
               {days.map((d, i) => {
                 const dateObj = new Date(d.year, d.month, d.day);
-                const dateStr = dateObj.toISOString().split('T')[0];
+                const dateStr = formatDateLocal(dateObj);
                 const daySchedule = schedule.find(s => s.userId === currentUser.id && s.date === dateStr);
 
                 const isToday = dateStr === todayStr;
