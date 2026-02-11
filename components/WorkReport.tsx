@@ -431,9 +431,33 @@ const WorkReport: React.FC<WorkReportProps> = ({
 
       {/* Date Selector */}
       <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-500 mb-2 flex items-center gap-2">
-          <Calendar className="w-4 h-4" /> Выберите дату
+        <label className="block text-sm font-medium text-gray-500 mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4" /> Выберите дату
+          </div>
+
+          {/* Re-implementing the button as a prominent link/button in the header */}
+          <div className="relative">
+            <button
+              onClick={() => dateInputRef.current?.showPicker()}
+              className="px-3 py-1.5 bg-brand-50 text-brand-600 text-xs font-bold rounded-lg flex items-center gap-2 hover:bg-brand-100 transition-all active:scale-95"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Календарь
+            </button>
+            <input
+              ref={dateInputRef}
+              type="date"
+              className="absolute inset-0 opacity-0 cursor-pointer pointer-events-none"
+              value={selectedDate}
+              onChange={(e) => {
+                if (e.target.value) setSelectedDate(e.target.value);
+              }}
+              max={todayStr}
+            />
+          </div>
         </label>
+
         <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
           {last7Days.map(date => {
             const isSelected = date === selectedDate;
@@ -461,28 +485,6 @@ const WorkReport: React.FC<WorkReportProps> = ({
               </button>
             );
           })}
-
-          {/* New prominent Calendar Button at the end of the scroll list */}
-          <div className="relative flex-shrink-0">
-            <button
-              onClick={() => dateInputRef.current?.showPicker()}
-              className="flex flex-col items-center justify-center w-16 h-20 rounded-2xl border border-dashed border-gray-300 bg-gray-50 text-gray-500 hover:bg-gray-100 transition-all active:scale-95"
-            >
-              <Calendar className="w-6 h-6 mb-1 text-gray-400" />
-              <span className="text-[10px] font-bold uppercase">Другой</span>
-            </button>
-            <input
-              ref={dateInputRef}
-              type="date"
-              className="absolute inset-0 opacity-0 cursor-pointer"
-              style={{ width: '100%', height: '100%', WebkitAppearance: 'none' }}
-              value={selectedDate}
-              onChange={(e) => {
-                if (e.target.value) setSelectedDate(e.target.value);
-              }}
-              max={todayStr}
-            />
-          </div>
         </div>
       </div>
 
