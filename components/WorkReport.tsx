@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { PriceItem, WorkLogItem, ClientObject, User, ScheduledDay, ReportStatus } from '../types';
 import { scheduleApi } from '../services/api';
-import { Plus, Minus, Calculator, Loader2, CheckCircle, Save, Clock, Banknote, ChevronDown, ClipboardList, Calendar } from 'lucide-react';
+import { Plus, Minus, Calculator, Loader2, CheckCircle, Save, Clock, Banknote, ChevronDown, ClipboardList, Calendar, Cloud, RefreshCw } from 'lucide-react';
 
 interface WorkReportProps {
   objects: ClientObject[];
@@ -30,11 +30,15 @@ const WorkReport: React.FC<WorkReportProps> = ({
   const [actionType, setActionType] = useState<'save_draft' | 'submit' | 'confirm_payment' | null>(null);
   const [openCategory, setOpenCategory] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [lastSaved, setLastSaved] = useState<number>(0);
 
   // Track initialization and last local edit time to prevent polling from overwriting active edits
   const isInitializedRef = useRef(false);
   const lastLocalEditTimeRef = useRef<number>(0);
   const lastServerDataHashRef = useRef<string>('');
+  const dateInputRef = useRef<HTMLInputElement>(null);
+  const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -284,8 +288,104 @@ const WorkReport: React.FC<WorkReportProps> = ({
     }
   };
 
+  // Autosave Logic
+  useEffect(() => {
+    // Only autosave if:
+    // 1. We are initialized
+    // 2. The report is editable
+    // 3. User has actually made an edit (lastLocalEditTime > 0)
+    // 4. We aren't already manually saving
+    if (!isInitializedRef.current || !isEditable || lastLocalEditTimeRef.current === 0 || isSaving) {
+      return;
+    }
+
+    // Don't autosave if the state matches what we know is on the server
+    if (normalizeWorkLog(log) === lastServerDataHashRef.current) {
+      return;
+    }
+
+    // Clear existing timer
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+    }
+
+    setSaveStatus('saving');
+
+    // Set new timer for debounce (2.5 seconds)
+    autosaveTimerRef.current = setTimeout(async () => {
+      try {
+        const updated = await scheduleApi.completeWork({
+          userId: currentUser.id,
+          date: selectedDate,
+          objectId: selectedObject,
+          workLog: log,
+          status: 'draft', // Autosave always saves as draft
+          completed: false,
+        });
+
+        // Update tracking to match what's now on server
+        if (updated?.workLog) {
+          lastServerDataHashRef.current = normalizeWorkLog(updated.workLog);
+        }
+
+        setSaveStatus('saved');
+        setLastSaved(Date.now());
+
+        // Notify parent if needed
+        if (onUpdateScheduleItem) {
+          onUpdateScheduleItem(updated);
+        }
+
+        // Return to idle after a while
+        setTimeout(() => setSaveStatus('idle'), 3000);
+      } catch (err) {
+        console.error('Autosave failed:', err);
+        setSaveStatus('error');
+      }
+    }, 2500);
+
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+    };
+  }, [log, selectedObject, selectedDate, isEditable, currentUser.id, isSaving]);
+
   // Status Banner
   const renderStatusBanner = () => {
+    if (saveStatus === 'saving') {
+      return (
+        <div className="bg-gray-100 text-gray-600 p-3 rounded-xl mb-4 flex items-center justify-between text-xs border border-gray-200 animate-pulse">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="w-4 h-4 animate-spin" />
+            <span>Автосохранение черновика...</span>
+          </div>
+        </div>
+      );
+    }
+
+    if (saveStatus === 'saved') {
+      return (
+        <div className="bg-green-50 text-green-700 p-3 rounded-xl mb-4 flex items-center justify-between text-xs border border-green-100">
+          <div className="flex items-center gap-2">
+            <Cloud className="w-4 h-4" />
+            <span>Черновик сохранен {lastSaved ? `в ${new Date(lastSaved).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+          </div>
+        </div>
+      );
+    }
+
+    if (saveStatus === 'error') {
+      return (
+        <div className="bg-red-50 text-red-700 p-3 rounded-xl mb-4 flex items-center justify-between text-xs border border-red-100">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-4 h-4" />
+            <span>Ошибка автосохранения. Проверьте интернет.</span>
+          </div>
+        </div>
+      );
+    }
+
     switch (status) {
       case 'pending_approval':
         return (
@@ -331,8 +431,29 @@ const WorkReport: React.FC<WorkReportProps> = ({
 
       {/* Date Selector */}
       <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-500 mb-2 flex items-center gap-2">
-          <Calendar className="w-4 h-4" /> Выберите дату
+        <label className="block text-sm font-medium text-gray-500 mb-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4" /> Выберите дату
+          </div>
+          {/* Calendar hidden input logic */}
+          <div className="relative">
+            <button
+              onClick={() => dateInputRef.current?.showPicker()}
+              className="text-brand-600 text-xs font-bold flex items-center gap-1 bg-brand-50 px-2 py-1 rounded-lg hover:bg-brand-100 transition-colors"
+            >
+              Выбрать другой день
+            </button>
+            <input
+              ref={dateInputRef}
+              type="date"
+              className="absolute opacity-0 pointer-events-none"
+              value={selectedDate}
+              onChange={(e) => {
+                if (e.target.value) setSelectedDate(e.target.value);
+              }}
+              max={todayStr}
+            />
+          </div>
         </label>
         <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
           {last7Days.map(date => {
