@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { PriceItem, WorkLogItem, ClientObject, User, ScheduledDay, ReportStatus } from '../types';
 import { scheduleApi } from '../services/api';
-import { Plus, Minus, Calculator, Loader2, CheckCircle, Save, Clock, Banknote, ChevronDown, ClipboardList, Calendar, Cloud, RefreshCw } from 'lucide-react';
+import { Plus, Minus, Calculator, Loader2, CheckCircle, Save, Clock, Banknote, ChevronDown, ClipboardList, Calendar, Cloud, RefreshCw, AlertTriangle } from 'lucide-react';
 
 interface WorkReportProps {
   objects: ClientObject[];
@@ -64,7 +64,13 @@ const WorkReport: React.FC<WorkReportProps> = ({
   };
 
   const status = getStatus();
-  const isEditable = status === 'draft' || status === 'pending_approval';
+  const isPastDate = selectedDate < todayStr;
+  const isScheduled = !!existingDay;
+
+  // Fraud Prevention: Can only edit past days if a shift was already created/assigned
+  const isEditable = isPastDate
+    ? (isScheduled && (status === 'draft' || status === 'pending_approval'))
+    : (status === 'draft' || status === 'pending_approval');
 
   // Normalize workLog for comparison (sort by itemId, filter zeros)
   const normalizeWorkLog = (workLog: WorkLogItem[] | undefined): string => {
@@ -382,6 +388,15 @@ const WorkReport: React.FC<WorkReportProps> = ({
             <CheckCircle className="w-4 h-4" />
             <span>Ошибка автосохранения. Проверьте интернет.</span>
           </div>
+        </div>
+      );
+    }
+
+    if (isPastDate && !isScheduled) {
+      return (
+        <div className="bg-red-50 text-red-800 p-4 rounded-xl mb-4 flex gap-3 text-sm border border-red-200">
+          <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+          <div>Смена на этот день не была запланирована. Вы не можете создать отчет задним числом. Обратитесь к админу, если это ошибка.</div>
         </div>
       );
     }
