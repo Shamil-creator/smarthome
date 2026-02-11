@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { PriceItem, WorkLogItem, ClientObject, User, ScheduledDay, ReportStatus } from '../types';
 import { scheduleApi } from '../services/api';
-import { Plus, Minus, Calculator, Loader2, CheckCircle, Save, Clock, Banknote, ChevronDown, ClipboardList, Calendar, Cloud, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Plus, Minus, Calculator, Loader2, CheckCircle, Save, Clock, Banknote, ChevronDown, ClipboardList, Calendar, Cloud, RefreshCw, AlertTriangle, ChevronLeft, ChevronRight, X } from 'lucide-react';
 
 interface WorkReportProps {
   objects: ClientObject[];
@@ -32,12 +32,13 @@ const WorkReport: React.FC<WorkReportProps> = ({
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [lastSaved, setLastSaved] = useState<number>(0);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [viewDate, setViewDate] = useState(new Date()); // For calendar navigation
 
   // Track initialization and last local edit time to prevent polling from overwriting active edits
   const isInitializedRef = useRef(false);
   const lastLocalEditTimeRef = useRef<number>(0);
   const lastServerDataHashRef = useRef<string>('');
-  const dateInputRef = useRef<HTMLInputElement>(null);
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -45,7 +46,7 @@ const WorkReport: React.FC<WorkReportProps> = ({
   // Helper to get last 7 days
   const last7Days = useMemo(() => {
     const dates = [];
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 14; i++) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       dates.push(d.toISOString().split('T')[0]);
@@ -357,6 +358,131 @@ const WorkReport: React.FC<WorkReportProps> = ({
     };
   }, [log, selectedObject, selectedDate, isEditable, currentUser.id, isSaving]);
 
+  // Calendar Modal Component
+  const renderCalendarModal = () => {
+    if (!isCalendarOpen) return null;
+
+    const month = viewDate.getMonth();
+    const year = viewDate.getFullYear();
+
+    const firstDayOfMonth = new Date(year, month, 1).getDay();
+    // Adjust for Monday start (0: Sun -> 6, 1: Mon -> 0)
+    const startOffset = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
+
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const prevMonthDays = new Date(year, month, 0).getDate();
+
+    const monthName = new Date(year, month).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+
+    const handlePrevMonth = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setViewDate(new Date(year, month - 1, 1));
+    };
+
+    const handleNextMonth = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setViewDate(new Date(year, month + 1, 1));
+    };
+
+    const days = [];
+
+    // Fill previous month padding
+    for (let i = startOffset - 1; i >= 0; i--) {
+      days.push({ day: prevMonthDays - i, month: month - 1, year, current: false });
+    }
+
+    // Fill current month
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push({ day: i, month: month, year, current: true });
+    }
+
+    // Fill next month padding
+    const remaining = 42 - days.length; // 6 rows of 7 days
+    for (let i = 1; i <= remaining; i++) {
+      days.push({ day: i, month: month + 1, year, current: false });
+    }
+
+    return (
+      <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 animate-fade-in" onClick={() => setIsCalendarOpen(false)}>
+        <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-scale-in" onClick={e => e.stopPropagation()}>
+          <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+            <button onClick={handlePrevMonth} className="p-2 hover:bg-white rounded-full transition-colors">
+              <ChevronLeft className="w-5 h-5 text-gray-600" />
+            </button>
+            <h3 className="text-lg font-bold text-gray-800 capitalize">{monthName}</h3>
+            <button onClick={handleNextMonth} className="p-2 hover:bg-white rounded-full transition-colors">
+              <ChevronRight className="w-5 h-5 text-gray-600" />
+            </button>
+          </div>
+
+          <div className="p-4">
+            <div className="grid grid-cols-7 mb-2">
+              {['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'].map(d => (
+                <div key={d} className="text-center text-[10px] uppercase font-bold text-gray-400 py-2">{d}</div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-1">
+              {days.map((d, i) => {
+                const dateObj = new Date(d.year, d.month, d.day);
+                const dateStr = dateObj.toISOString().split('T')[0];
+                const daySchedule = schedule.find(s => s.userId === currentUser.id && s.date === dateStr);
+
+                const isToday = dateStr === todayStr;
+                const isSelected = dateStr === selectedDate;
+                const isFuture = dateStr > todayStr;
+
+                let dotColor = null;
+                if (daySchedule) {
+                  const s = daySchedule.status || (daySchedule.completed ? 'completed' : 'draft');
+                  if (s === 'draft' || s === 'pending_approval') {
+                    dotColor = 'bg-yellow-400';
+                  } else {
+                    dotColor = 'bg-green-500';
+                  }
+                }
+
+                return (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      if (!isFuture) {
+                        setSelectedDate(dateStr);
+                        setIsCalendarOpen(false);
+                      }
+                    }}
+                    disabled={isFuture}
+                    className={`
+                      relative flex flex-col items-center justify-center p-2 rounded-xl transition-all h-12
+                      ${isSelected ? 'bg-brand-600 text-white shadow-md' : 'hover:bg-gray-100'}
+                      ${!d.current ? 'opacity-30' : ''}
+                      ${isFuture ? 'text-gray-200 cursor-not-allowed' : 'text-gray-700'}
+                      ${isToday && !isSelected ? 'border border-brand-500 text-brand-600' : ''}
+                    `}
+                  >
+                    <span className="text-sm font-semibold">{d.day}</span>
+                    {dotColor && (
+                      <div className={`w-1 h-1 rounded-full absolute bottom-1.5 ${isSelected ? 'bg-white' : dotColor}`} />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end">
+            <button
+              onClick={() => setIsCalendarOpen(false)}
+              className="px-6 py-2 text-sm font-bold text-gray-500 hover:text-gray-700"
+            >
+              Закрыть
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Status Banner
   const renderStatusBanner = () => {
     if (saveStatus === 'saving') {
@@ -443,6 +569,7 @@ const WorkReport: React.FC<WorkReportProps> = ({
       </h1>
 
       {renderStatusBanner()}
+      {renderCalendarModal()}
 
       {/* Date Selector */}
       <div className="mb-6">
@@ -451,26 +578,22 @@ const WorkReport: React.FC<WorkReportProps> = ({
             <Calendar className="w-4 h-4" /> Выберите дату
           </div>
 
-          {/* Robust date picker trigger using a hidden input overlay */}
+          {/* Robust date picker trigger using custom calendar modal */}
           <div className="relative group">
-            <div className="px-3 py-1.5 bg-brand-50 text-brand-600 text-xs font-bold rounded-lg flex items-center gap-2 group-hover:bg-brand-100 transition-all group-active:scale-95">
+            <button
+              onClick={() => {
+                setViewDate(new Date(selectedDate));
+                setIsCalendarOpen(true);
+              }}
+              className="px-3 py-1.5 bg-brand-50 text-brand-600 text-xs font-bold rounded-lg flex items-center gap-2 hover:bg-brand-100 transition-all active:scale-95"
+            >
               <Calendar className="w-3.5 h-3.5" />
               <span>
                 {selectedDate === todayStr
                   ? 'Календарь'
                   : new Date(selectedDate).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' })}
               </span>
-            </div>
-            <input
-              ref={dateInputRef}
-              type="date"
-              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-              value={selectedDate}
-              onChange={(e) => {
-                if (e.target.value) setSelectedDate(e.target.value);
-              }}
-              max={todayStr}
-            />
+            </button>
           </div>
         </label>
 
