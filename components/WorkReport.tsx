@@ -465,8 +465,11 @@ const WorkReport: React.FC<WorkReportProps> = ({
                     className={`
                       relative flex flex-col items-center justify-center p-2 rounded-xl transition-all h-12
                       ${isSelected ? 'bg-brand-600 text-white shadow-md' : 'hover:bg-gray-100'}
-                      ${!d.current ? 'opacity-30' : ''}
-                      ${isFuture ? 'text-gray-200 cursor-not-allowed' : 'text-gray-700'}
+                      ${isFuture
+                        ? 'text-gray-200 cursor-not-allowed'
+                        : (daySchedule || isToday ? 'text-gray-900 font-bold' : 'text-gray-400')
+                      }
+                      ${!d.current && (isFuture || !daySchedule) ? 'opacity-30' : ''}
                       ${isToday && !isSelected ? 'border border-brand-500 text-brand-600' : ''}
                     `}
                   >
