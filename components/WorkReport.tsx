@@ -454,8 +454,12 @@ const WorkReport: React.FC<WorkReportProps> = ({
           {/* Robust date picker trigger using a hidden input overlay */}
           <div className="relative group">
             <div className="px-3 py-1.5 bg-brand-50 text-brand-600 text-xs font-bold rounded-lg flex items-center gap-2 group-hover:bg-brand-100 transition-all group-active:scale-95">
-              <RefreshCw className="w-3.5 h-3.5" />
-              Календарь
+              <Calendar className="w-3.5 h-3.5" />
+              <span>
+                {selectedDate === todayStr
+                  ? 'Календарь'
+                  : new Date(selectedDate).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+              </span>
             </div>
             <input
               ref={dateInputRef}
