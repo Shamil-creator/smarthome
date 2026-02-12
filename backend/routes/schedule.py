@@ -1,4 +1,5 @@
 import re
+import datetime
 from flask import Blueprint, jsonify, request, g
 from sqlalchemy.orm import joinedload
 from database import db, ScheduledDay, WorkLogItem, User, PriceItem
@@ -254,6 +255,9 @@ def create_or_update_schedule():
         return jsonify(existing.to_dict())
     else:
         # Create new
+        now_str = datetime.datetime.now().strftime('%Y-%m-%d')
+        is_backdated = date < now_str
+        
         status = data.get('status', 'draft')
         if status not in VALID_STATUSES:
             status = 'draft'
@@ -268,6 +272,7 @@ def create_or_update_schedule():
             object_id=object_id,
             completed=False,
             status=status,
+            is_backdated=is_backdated,
             earnings=0
         )
         db.session.add(scheduled_day)
@@ -388,12 +393,16 @@ def complete_work():
         if not update_work_log(scheduled_day, work_log):
             return jsonify({'error': 'Invalid work log items'}), 400
     else:
+        now_str = datetime.datetime.now().strftime('%Y-%m-%d')
+        is_backdated = date < now_str
+        
         scheduled_day = ScheduledDay(
             user_id=user_id,
             date=date,
             object_id=object_id,
             completed=False,
             status=status,
+            is_backdated=is_backdated,
             earnings=total_earnings
         )
         db.session.add(scheduled_day)

@@ -83,6 +83,7 @@ class ScheduledDay(db.Model):
     completed = db.Column(db.Boolean, default=False)
     # Status: draft, pending_approval, approved_waiting_payment, paid_waiting_confirmation, completed
     status = db.Column(db.String(50), default='draft', index=True)
+    is_backdated = db.Column(db.Boolean, default=False)
     earnings = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -99,6 +100,7 @@ class ScheduledDay(db.Model):
             'objectId': str(self.object_id) if self.object_id else None,
             'completed': self.completed,
             'status': effective_status,
+            'isBackdated': self.is_backdated,
             'earnings': self.earnings,
             'workLog': [item.to_dict() for item in self.work_log]
         }
@@ -162,6 +164,10 @@ def init_db(app):
             if 'coefficient' not in column_names:
                 db.session.execute(text(
                     "ALTER TABLE work_log_items ADD COLUMN coefficient FLOAT NOT NULL DEFAULT 1.0"
+                ))
+            if 'is_backdated' not in column_names:
+                db.session.execute(text(
+                    "ALTER TABLE scheduled_days ADD COLUMN is_backdated BOOLEAN NOT NULL DEFAULT 0"
                 ))
                 db.session.commit()
         except Exception:

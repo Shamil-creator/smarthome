@@ -435,6 +435,12 @@ const AdminView: React.FC<AdminViewProps> = ({
     }
   };
 
+  // Helper to get backdated badge
+  const getBackdatedBadge = (isBackdated?: boolean) => {
+    if (!isBackdated) return null;
+    return <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight">Задним числом</span>;
+  };
+
   // --- User Stats Calculations ---
   const getUserStats = (userId: number) => {
     // Get all work entries for user
@@ -531,9 +537,10 @@ const AdminView: React.FC<AdminViewProps> = ({
                         className="w-full p-4 flex justify-between items-center hover:bg-gray-50 transition-colors"
                       >
                         <div className="text-left">
-                          <div className="font-medium text-gray-900 flex items-center gap-2">
+                          <div className="font-medium text-gray-900 flex items-center gap-2 flex-wrap">
                             {new Date(day.date).toLocaleDateString('ru-RU')}
                             {getStatusBadge(day.status)}
+                            {getBackdatedBadge(day.isBackdated)}
                           </div>
                           <div className="text-xs text-gray-500 mt-1">{objects.find(o => o.id === day.objectId)?.name || 'Неизвестный объект'}</div>
                         </div>

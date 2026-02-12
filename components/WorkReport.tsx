@@ -78,10 +78,7 @@ const WorkReport: React.FC<WorkReportProps> = ({
   const isPastDate = selectedDate < todayStr;
   const isScheduled = !!existingDay;
 
-  // Fraud Prevention: Can only edit past days if a shift was already created/assigned
-  const isEditable = isPastDate
-    ? (isScheduled && (status === 'draft' || status === 'pending_approval'))
-    : (status === 'draft' || status === 'pending_approval');
+  const isEditable = status === 'draft' || status === 'pending_approval';
 
   // Normalize workLog for comparison (sort by itemId, filter zeros)
   const normalizeWorkLog = (workLog: WorkLogItem[] | undefined): string => {
@@ -533,9 +530,9 @@ const WorkReport: React.FC<WorkReportProps> = ({
 
     if (isPastDate && !isScheduled) {
       return (
-        <div className="bg-red-50 text-red-800 p-4 rounded-xl mb-4 flex gap-3 text-sm border border-red-200">
-          <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-          <div>Смена на этот день не была запланирована. Вы не можете создать отчет задним числом. Обратитесь к админу, если это ошибка.</div>
+        <div className="bg-blue-50 text-blue-800 p-4 rounded-xl mb-4 flex gap-3 text-sm border border-blue-200">
+          <Calendar className="w-5 h-5 flex-shrink-0" />
+          <div>Смена на этот день не была запланирована, но вы можете добавить отчет. Он будет помечен для админа как "добавленный задним числом".</div>
         </div>
       );
     }

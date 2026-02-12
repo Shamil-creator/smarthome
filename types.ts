@@ -45,6 +45,7 @@ export interface ScheduledDay {
   objectId: string | null;
   completed: boolean; // Keep for backward compatibility with API
   status: ReportStatus; // New status field for detailed workflow
+  isBackdated?: boolean;
   earnings: number;
   workLog?: WorkLogItem[]; // Detailed breakdown of work done
 }
