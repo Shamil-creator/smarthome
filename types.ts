@@ -84,5 +84,6 @@ export const adaptScheduledDay = (day: Partial<ScheduledDay>): ScheduledDay => {
     status: hasStatus ? day.status! : completedToStatus(day.completed ?? false),
     // If we have completed, use it; otherwise derive from status
     completed: hasCompleted ? day.completed! : (hasStatus ? statusToCompleted(day.status!) : false),
+    isBackdated: day.isBackdated,
   };
 };

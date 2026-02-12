@@ -165,6 +165,13 @@ def init_db(app):
                 db.session.execute(text(
                     "ALTER TABLE work_log_items ADD COLUMN coefficient FLOAT NOT NULL DEFAULT 1.0"
                 ))
+                db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+        try:
+            columns = db.session.execute(text("PRAGMA table_info(scheduled_days)")).fetchall()
+            column_names = {row[1] for row in columns}
             if 'is_backdated' not in column_names:
                 db.session.execute(text(
                     "ALTER TABLE scheduled_days ADD COLUMN is_backdated BOOLEAN NOT NULL DEFAULT 0"
