@@ -86,7 +86,7 @@ def generate_user_report_xlsx(payload: dict) -> bytes:
     ws_summary.append(["Сформирован", payload.get("generatedAt") or ""])
 
     ws_history = wb.create_sheet("History")
-    ws_history.append(["Дата", "Объект", "Адрес", "Статус", "Заработок", "Работы"])
+    ws_history.append(["Дата", "Объект", "Адрес", "Статус", "Заработок", "Работы", "Комментарий"])
 
     if days:
         for day in days:
@@ -100,9 +100,10 @@ def generate_user_report_xlsx(payload: dict) -> bytes:
                 day.get("status") or "",
                 day.get("earnings") or 0,
                 works,
+                day.get("installerComment") or "-",
             ])
     else:
-        ws_history.append(["Нет данных", "", "", "", "", ""])
+        ws_history.append(["Нет данных", "", "", "", "", "", ""])
 
     buffer = io.BytesIO()
     wb.save(buffer)

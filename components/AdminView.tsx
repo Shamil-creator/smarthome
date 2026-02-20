@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { ClientObject, PriceItem, User, ScheduledDay, DocItem, isAccruedStatus, ReportStatus } from '../types';
 import { objectsApi, pricesApi, docsApi, scheduleApi, reportsApi } from '../services/api';
-import { Settings, Plus, Trash2, Edit2, Building, DollarSign, Users, FileText, ChevronRight, ChevronDown, ChevronUp, ExternalLink, Loader2, Upload, X, Image as ImageIcon, Download, CheckCircle, Clock, Banknote } from 'lucide-react';
+import { Settings, Plus, Trash2, Edit2, Building, DollarSign, Users, FileText, ChevronRight, ChevronDown, ChevronUp, ExternalLink, Loader2, Upload, X, Image as ImageIcon, Download, CheckCircle, Clock, Banknote, MessageSquare } from 'lucide-react';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'docx'];
@@ -626,6 +626,18 @@ const AdminView: React.FC<AdminViewProps> = ({
                             })
                           ) : (
                             <div className="text-gray-400 italic">Нет детальных данных</div>
+                          )}
+
+                          {day.installerComment && (
+                            <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100 mt-4 mb-2">
+                              <div className="flex items-center gap-1.5 text-blue-700 font-bold text-xs uppercase mb-1.5">
+                                <MessageSquare className="w-4 h-4" />
+                                Комментарий монтажника
+                              </div>
+                              <div className="text-sm text-gray-800 whitespace-pre-wrap">
+                                {day.installerComment}
+                              </div>
+                            </div>
                           )}
 
                           {/* Admin Actions */}

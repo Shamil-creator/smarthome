@@ -310,6 +310,7 @@ export const scheduleApi = {
     objectId?: string | null;
     completed?: boolean;
     earnings?: number;
+    installerComment?: string;
     workLog?: WorkLogItem[];
   }): Promise<ScheduledDay> => {
     invalidateCache('schedule:');
@@ -324,6 +325,7 @@ export const scheduleApi = {
     date: string;
     objectId: string;
     workLog: WorkLogItem[];
+    installerComment?: string;
     status?: ReportStatus;
     completed?: boolean;
   }): Promise<ScheduledDay> => {
@@ -338,6 +340,7 @@ export const scheduleApi = {
   editReport: async (scheduleId: number, data: {
     objectId?: string;
     workLog?: WorkLogItem[];
+    installerComment?: string;
     status?: ReportStatus;
     earnings?: number;
   }): Promise<ScheduledDay> => {

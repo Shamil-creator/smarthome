@@ -47,6 +47,7 @@ export interface ScheduledDay {
   status: ReportStatus; // New status field for detailed workflow
   isBackdated?: boolean;
   earnings: number;
+  installerComment?: string;
   workLog?: WorkLogItem[]; // Detailed breakdown of work done
 }
 
@@ -85,5 +86,6 @@ export const adaptScheduledDay = (day: Partial<ScheduledDay>): ScheduledDay => {
     // If we have completed, use it; otherwise derive from status
     completed: hasCompleted ? day.completed! : (hasStatus ? statusToCompleted(day.status!) : false),
     isBackdated: day.isBackdated,
+    installerComment: day.installerComment,
   };
 };

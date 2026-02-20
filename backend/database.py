@@ -85,6 +85,7 @@ class ScheduledDay(db.Model):
     status = db.Column(db.String(50), default='draft', index=True)
     is_backdated = db.Column(db.Boolean, default=False)
     earnings = db.Column(db.Integer, default=0)
+    installer_comment = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationships - use selectin for efficient batch loading (fixes N+1)
@@ -102,6 +103,7 @@ class ScheduledDay(db.Model):
             'status': effective_status,
             'isBackdated': self.is_backdated,
             'earnings': self.earnings,
+            'installerComment': self.installer_comment,
             'workLog': [item.to_dict() for item in self.work_log]
         }
 
@@ -175,6 +177,11 @@ def init_db(app):
             if 'is_backdated' not in column_names:
                 db.session.execute(text(
                     "ALTER TABLE scheduled_days ADD COLUMN is_backdated BOOLEAN NOT NULL DEFAULT 0"
+                ))
+                db.session.commit()
+            if 'installer_comment' not in column_names:
+                db.session.execute(text(
+                    "ALTER TABLE scheduled_days ADD COLUMN installer_comment TEXT"
                 ))
                 db.session.commit()
         except Exception:

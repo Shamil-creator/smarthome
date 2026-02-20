@@ -32,6 +32,7 @@ const WorkReport: React.FC<WorkReportProps> = ({
   const [actionType, setActionType] = useState<'save_draft' | 'submit' | 'confirm_payment' | null>(null);
   const [openCategory, setOpenCategory] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
+  const [comment, setComment] = useState<string>('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [lastSaved, setLastSaved] = useState<number>(0);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
@@ -108,6 +109,7 @@ const WorkReport: React.FC<WorkReportProps> = ({
           setSelectedObject(objects[0].id);
         }
         setLog([]);
+        setComment('');
         lastServerDataHashRef.current = '';
         isInitializedRef.current = true;
       }
@@ -128,6 +130,7 @@ const WorkReport: React.FC<WorkReportProps> = ({
         setLog([]);
         lastServerDataHashRef.current = '';
       }
+      setComment(existingDay.installerComment || '');
       isInitializedRef.current = true;
       return;
     }
@@ -269,6 +272,7 @@ const WorkReport: React.FC<WorkReportProps> = ({
           date: selectedDate,
           objectId: selectedObject,
           workLog: log,
+          installerComment: comment,
           status: newStatus,
           completed: completed,
         });
@@ -333,6 +337,7 @@ const WorkReport: React.FC<WorkReportProps> = ({
           date: selectedDate,
           objectId: selectedObject,
           workLog: log,
+          installerComment: comment,
           status: 'draft', // Autosave always saves as draft
           completed: false,
         });
@@ -770,6 +775,27 @@ const WorkReport: React.FC<WorkReportProps> = ({
             </div>
           );
         })}
+      </div>
+
+      {/* Installer Comment */}
+      <div className="mt-6 mb-8">
+        <label className="block text-sm font-medium text-gray-500 mb-2">Комментарий к отчету (необязательно)</label>
+        <textarea
+          value={comment}
+          onChange={(e) => {
+            if (isEditable) {
+              setComment(e.target.value);
+              lastLocalEditTimeRef.current = Date.now();
+            }
+          }}
+          disabled={!isEditable}
+          rows={3}
+          placeholder="Напишите здесь детали, о которых стоит знать админу..."
+          className={`w-full p-4 border rounded-xl font-medium outline-none resize-none transition-colors ${!isEditable
+            ? 'bg-gray-100 border-gray-200 text-gray-500'
+            : 'bg-white border-gray-200 text-gray-800 focus:ring-2 focus:ring-brand-500 hover:border-brand-300'
+            }`}
+        />
       </div>
 
       {/* Sticky Bottom Bar */}

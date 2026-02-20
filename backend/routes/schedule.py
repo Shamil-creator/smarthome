@@ -197,6 +197,7 @@ def create_or_update_schedule():
     user_id = data.get('userId')
     date = data.get('date')
     object_id = data.get('objectId')
+    installer_comment = data.get('installerComment')
     
     # Validate required fields
     if not user_id:
@@ -246,6 +247,9 @@ def create_or_update_schedule():
             except (ValueError, TypeError):
                 pass
         
+        if 'installerComment' in data:
+            existing.installer_comment = installer_comment
+        
         # Handle work log if provided
         if 'workLog' in data:
             if not update_work_log(existing, data['workLog']):
@@ -273,7 +277,8 @@ def create_or_update_schedule():
             completed=False,
             status=status,
             is_backdated=is_backdated,
-            earnings=0
+            earnings=0,
+            installer_comment=installer_comment
         )
         db.session.add(scheduled_day)
         db.session.flush()  # Get the ID
@@ -305,6 +310,9 @@ def update_schedule(schedule_id):
     
     if 'objectId' in data:
         scheduled_day.object_id = parse_object_id(data['objectId'])
+        
+    if 'installerComment' in data:
+        scheduled_day.installer_comment = data['installerComment']
     
     # Only admin can directly set completed/status/earnings
     if g.current_user.role == 'admin':
@@ -345,6 +353,7 @@ def complete_work():
     user_id = data.get('userId')
     date = data.get('date')
     object_id = data.get('objectId')
+    installer_comment = data.get('installerComment')
     work_log = data.get('workLog', [])
     status = data.get('status', 'pending_approval')
     
@@ -389,6 +398,9 @@ def complete_work():
         scheduled_day.earnings = total_earnings
         scheduled_day.completed = (status == 'completed')
         
+        if 'installerComment' in data:
+            scheduled_day.installer_comment = installer_comment
+        
         # Update work log
         if not update_work_log(scheduled_day, work_log):
             return jsonify({'error': 'Invalid work log items'}), 400
@@ -403,7 +415,8 @@ def complete_work():
             completed=False,
             status=status,
             is_backdated=is_backdated,
-            earnings=total_earnings
+            earnings=total_earnings,
+            installer_comment=installer_comment
         )
         db.session.add(scheduled_day)
         db.session.flush()
@@ -442,6 +455,9 @@ def edit_report(schedule_id):
     # Update object if provided
     if 'objectId' in data:
         scheduled_day.object_id = parse_object_id(data['objectId'])
+        
+    if 'installerComment' in data:
+        scheduled_day.installer_comment = data['installerComment']
     
     # Update work log if provided (recalculates earnings)
     if 'workLog' in data:

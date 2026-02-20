@@ -33,6 +33,7 @@ def build_user_report_payload(user: User, days: list[ScheduledDay], admin_telegr
                 'name': day.object.name if day.object else None,
                 'address': day.object.address if day.object else None,
             },
+            'installerComment': day.installer_comment,
             'workLog': work_items,
         })
 
